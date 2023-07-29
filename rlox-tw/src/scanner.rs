@@ -47,7 +47,8 @@ impl<'s> Scanner<'s> {
             token_type: TokenType::Eof,
             lexeme: "",
             literal: None,
-            pos_start: scanner.current,
+            line: scanner.line,
+            col_start: 1,
             length: 0,
         });
 
@@ -170,7 +171,8 @@ impl<'s> Scanner<'s> {
             token_type,
             lexeme,
             literal,
-            pos_start: self.start,
+            line: self.line,
+            col_start: self.start - self.last_newline,
             length: self.current - self.start,
         });
     }

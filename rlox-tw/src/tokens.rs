@@ -14,8 +14,11 @@ pub struct Token<'s> {
     /// The optional literal part of the token (string or numeric literal).
     pub literal: Option<TokenLiteral<'s>>,
 
-    /// The index of the start of this token.
-    pub pos_start: usize,
+    /// The line that this token is on.
+    pub line: usize,
+
+    /// The column of the start of this token.
+    pub col_start: usize,
 
     /// The length of this token.
     pub length: usize,

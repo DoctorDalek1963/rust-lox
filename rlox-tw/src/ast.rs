@@ -79,6 +79,7 @@ impl fmt::Display for UnaryOperator {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Nil,
+    Boolean(bool),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
     Grouping(Box<Expr>),
     String(String),
