@@ -1,6 +1,7 @@
 //! This module acts as a top-level entrypoint to evaluating Lox code.
 
 use crate::{
+    interpreter::TwInterpreter,
     parser::Parser,
     pretty_printers::{ParenPrinter, RpnPrinter},
     scanner::Scanner,
@@ -80,8 +81,12 @@ impl LoxInterpreter {
             None => return,
         };
 
-        println!("{}", ParenPrinter::print(&expr));
-        println!("{}", RpnPrinter::print(&expr));
+        debug!(parens = ParenPrinter::print(&expr));
+        debug!(rpn = RpnPrinter::print(&expr));
+
+        if let Some(output) = TwInterpreter::interpret(&expr) {
+            println!("{}", output);
+        }
     }
 }
 

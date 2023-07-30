@@ -2,7 +2,9 @@
 //! <https://craftinginterpreters.com/a-tree-walk-interpreter.html>.
 
 pub(crate) mod ast;
+pub(crate) mod interpreter;
 pub(crate) mod lox;
+pub(crate) mod object;
 pub(crate) mod parser;
 pub(crate) mod pretty_printers;
 pub(crate) mod scanner;
