@@ -76,11 +76,13 @@ impl LoxInterpreter {
         debug!(?code);
 
         let tokens = Scanner::scan_tokens(code);
+        debug!(?tokens);
         let expr = match Parser::parse(tokens) {
             Some(expr) => expr,
             None => return,
         };
 
+        debug!(?expr);
         debug!(parens = ParenPrinter::print(&expr));
         debug!(rpn = RpnPrinter::print(&expr));
 
