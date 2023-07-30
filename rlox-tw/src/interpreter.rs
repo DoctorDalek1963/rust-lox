@@ -2,6 +2,7 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, UnaryOperator},
+    lox::print_error_message,
     object::LoxObject,
 };
 use std::fmt;
@@ -34,7 +35,7 @@ impl TwInterpreter {
         match interpreter.evaluate(expr) {
             Ok(obj) => Some(obj),
             Err(e) => {
-                eprintln!("ERROR: {}", e.message);
+                print_error_message(None, &e.message);
                 None
             }
         }

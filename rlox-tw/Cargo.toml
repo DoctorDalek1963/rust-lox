@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 color-eyre.workspace = true
+crossterm = "0.26.1"
 rustyline.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

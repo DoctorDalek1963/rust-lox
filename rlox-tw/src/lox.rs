@@ -59,7 +59,7 @@ impl LoxInterpreter {
                     self.run_code(&line);
 
                     if HAD_ERROR.load(Ordering::Relaxed) {
-                        eprintln!("ERROR: Bad input, please try again");
+                        print_error_message(None, "Bad input, please try again");
                     }
                 }
                 Err(ReadlineError::Eof | ReadlineError::Interrupted) => return Ok(()),
@@ -92,7 +92,10 @@ impl LoxInterpreter {
 
 /// Report the error with the given details.
 pub fn report_error(line: usize, col_start: usize, col_end: usize, message: &str) {
-    eprintln!("[line {line}, cols {col_start}:{col_end}] ERROR: {message}");
+    print_error_message(
+        Some(&format!("[line {line}, cols {col_start}:{col_end}]")),
+        message,
+    );
     HAD_ERROR.store(true, Ordering::Relaxed);
 }
 
@@ -110,4 +113,37 @@ pub fn report_token_error(token: &Token<'_>, message: &str) {
         token.col_start + token.length,
         &string,
     )
+}
+
+/// Print the given error message.
+pub fn print_error_message(prefix: Option<&str>, message: &str) {
+    use crossterm::{
+        execute,
+        style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+    };
+    use std::io::stderr;
+
+    if let Some(prefix) = prefix {
+        execute!(
+            stderr(),
+            Print(format!("{prefix} ")),
+            SetForegroundColor(Color::Red),
+            SetAttribute(Attribute::Bold),
+            Print("ERROR"),
+            ResetColor,
+            SetAttribute(Attribute::Reset),
+            Print(format!(": {message}\n"))
+        )
+    } else {
+        execute!(
+            stderr(),
+            SetForegroundColor(Color::Red),
+            SetAttribute(Attribute::Bold),
+            Print("ERROR"),
+            ResetColor,
+            SetAttribute(Attribute::Reset),
+            Print(format!(": {message}\n"))
+        )
+    }
+    .unwrap();
 }
