@@ -8,17 +8,29 @@ use crate::{
     span::{LineOffsets, Span},
     tokens::{Token, TokenType},
 };
+use lazy_static::lazy_static;
 use rustyline::{error::ReadlineError, DefaultEditor};
 use std::{
     fs, io,
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        RwLock,
+    },
 };
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-/// Have we encountered at least one error yet?
-static HAD_ERROR: AtomicBool = AtomicBool::new(false);
+/// Have we encountered at least one error before runtime?
+static HAD_NON_RUNTIME_ERROR: AtomicBool = AtomicBool::new(false);
+
+/// Have we encountered at least one error at runtime?
+static HAD_RUNTIME_ERROR: AtomicBool = AtomicBool::new(false);
+
+lazy_static! {
+    /// The LineOffsets of the code being worked with.
+    pub(crate) static ref LINE_OFFSETS: RwLock<LineOffsets> = RwLock::new(LineOffsets::new(""));
+}
 
 /// The Lox interpreter.
 #[derive(Clone, Copy, Debug)]
@@ -41,7 +53,7 @@ impl LoxInterpreter {
     pub fn run_file(&mut self, path: impl AsRef<Path>) -> io::Result<()> {
         self.run_code(&fs::read_to_string(path)?);
 
-        if HAD_ERROR.load(Ordering::Relaxed) {
+        if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
             eprintln!("TODO: Report error properly and return Err()");
         }
 
@@ -59,7 +71,7 @@ impl LoxInterpreter {
                     line.push('\n');
                     self.run_code(&line);
 
-                    if HAD_ERROR.load(Ordering::Relaxed) {
+                    if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
                         print_error_message(None, "Bad input, please try again");
                     }
                 }
@@ -67,7 +79,8 @@ impl LoxInterpreter {
                 Err(ReadlineError::Io(e)) => return Err(e)?,
                 Err(error) => panic!("Unknown error: `{error:?}`"),
             }
-            HAD_ERROR.store(false, Ordering::Relaxed);
+            HAD_NON_RUNTIME_ERROR.store(false, Ordering::Relaxed);
+            HAD_RUNTIME_ERROR.store(false, Ordering::Relaxed);
         }
     }
 
@@ -76,12 +89,10 @@ impl LoxInterpreter {
     fn run_code(&mut self, code: &str) {
         debug!(?code);
 
-        let mut scanner = Scanner::new(code);
-        let tokens = scanner.scan_tokens();
+        let tokens = Scanner::scan_tokens(code);
 
         debug!(?tokens);
-        let mut parser = Parser::new(tokens.clone(), scanner.line_offsets);
-        let expr = match parser.parse() {
+        let expr = match Parser::parse(tokens) {
             Some(expr) => expr,
             None => return,
         };
@@ -90,16 +101,45 @@ impl LoxInterpreter {
         debug!(parens = ParenPrinter::print(&expr));
         debug!(rpn = RpnPrinter::print(&expr));
 
-        if let Some(output) = TwInterpreter::interpret(&expr, &parser.line_offsets) {
+        if let Some(output) = TwInterpreter::interpret(&expr) {
             println!("{}", output.value);
         }
     }
 }
 
+/// Report an error at the given token with the given message.
+pub fn report_token_error(token: &Token<'_>, message: &str) {
+    let string = if token.token_type == TokenType::Eof {
+        format!("at end: {message}")
+    } else {
+        format!("at '{}': {message}", token.lexeme)
+    };
+
+    report_error(token.span, &string);
+    HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
+}
+
+/// Report an error during the scanning of source code.
+pub fn report_scanning_error(span: Span, message: &str) {
+    report_error(span, message);
+    HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
+}
+
+pub fn report_runtime_error(span: Span, message: &str) {
+    report_error(span, message);
+    HAD_RUNTIME_ERROR.store(true, Ordering::Relaxed);
+}
+
 /// Report the error with the given details.
-pub fn report_error(span: Span, line_offsets: &LineOffsets, message: &str) {
-    let (start_line, start_nl) = line_offsets.line_and_newline_offset(span.start);
-    let (end_line, end_nl) = line_offsets.line_and_newline_offset(span.end);
+fn report_error(span: Span, message: &str) {
+    let (start_line, start_nl) = LINE_OFFSETS
+        .read()
+        .unwrap()
+        .line_and_newline_offset(span.start);
+    let (end_line, end_nl) = LINE_OFFSETS
+        .read()
+        .unwrap()
+        .line_and_newline_offset(span.end);
     let start_col = span.start - start_nl + 1;
     let end_col = span.end - end_nl + 1;
 
@@ -110,18 +150,6 @@ pub fn report_error(span: Span, line_offsets: &LineOffsets, message: &str) {
     };
 
     print_error_message(Some(&prefix), message);
-    HAD_ERROR.store(true, Ordering::Relaxed);
-}
-
-/// Report an error at the given token with the given message.
-pub fn report_token_error(token: &Token<'_>, line_offsets: &LineOffsets, message: &str) {
-    let string = if token.token_type == TokenType::Eof {
-        format!("at end: {message}")
-    } else {
-        format!("at '{}': {message}", token.lexeme)
-    };
-
-    report_error(token.span, line_offsets, &string)
 }
 
 /// Print the given error message.

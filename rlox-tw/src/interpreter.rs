@@ -2,9 +2,8 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
-    lox::report_error,
     object::{LoxObject, SpanObject},
-    span::{LineOffsets, Span, WithSpan},
+    span::{Span, WithSpan},
 };
 use std::fmt;
 use thiserror::Error;
@@ -33,13 +32,13 @@ pub struct TwInterpreter {}
 
 impl TwInterpreter {
     /// Interpret the given AST.
-    pub fn interpret(expr: &SpanExpr, line_offsets: &LineOffsets) -> Option<SpanObject> {
+    pub fn interpret(expr: &SpanExpr) -> Option<SpanObject> {
         let mut interpreter = Self {};
 
         match interpreter.evaluate(expr) {
             Ok(obj) => Some(obj),
             Err(e) => {
-                report_error(e.span, line_offsets, &e.message);
+                crate::lox::report_runtime_error(e.span, &e.message);
                 None
             }
         }

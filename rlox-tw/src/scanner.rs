@@ -1,7 +1,7 @@
 //! This module handles scanning source code to produce tokens.
 
 use crate::{
-    lox::report_error,
+    lox::LINE_OFFSETS,
     span::{LineOffsets, Span},
     tokens::{Token, TokenLiteral, TokenType},
 };
@@ -10,9 +10,6 @@ use crate::{
 pub struct Scanner<'s> {
     /// The source code.
     source: &'s str,
-
-    /// The line offsets used for finding lines from spans in error messages.
-    pub line_offsets: LineOffsets,
 
     /// The tokens that we've already scanned out.
     tokens: Vec<Token<'s>>,
@@ -25,35 +22,33 @@ pub struct Scanner<'s> {
 }
 
 impl<'s> Scanner<'s> {
-    /// Create a new scanner to lex the given source code.
-    pub fn new(source: &'s str) -> Self {
-        Self {
+    /// Scan all the tokens from the given source code.
+    pub fn scan_tokens(source: &'s str) -> Vec<Token<'s>> {
+        *LINE_OFFSETS.write().unwrap() = LineOffsets::new(source);
+
+        let mut scanner = Self {
             source,
-            line_offsets: LineOffsets::new(source),
             tokens: Vec::new(),
             start: 0,
             current: 0,
-        }
-    }
+        };
 
-    /// Scan all the tokens from the given source code.
-    pub fn scan_tokens(&mut self) -> &Vec<Token<'s>> {
-        while !self.is_at_end() {
-            self.start = self.current;
-            self.scan_token();
+        while !scanner.is_at_end() {
+            scanner.start = scanner.current;
+            scanner.scan_token();
         }
 
-        self.tokens.push(Token {
+        scanner.tokens.push(Token {
             token_type: TokenType::Eof,
             lexeme: "",
             literal: None,
             span: Span {
-                start: self.current,
-                end: self.current,
+                start: scanner.current,
+                end: scanner.current,
             },
         });
 
-        &self.tokens
+        scanner.tokens
     }
 
     /// Are we at the end of the source code?
@@ -137,13 +132,13 @@ impl<'s> Scanner<'s> {
 
             c if c.is_ascii_alphabetic() => self.scan_identifier_or_keyword(),
 
-            _ => self.report_error(&format!("Unrecognied character: {c:?}")),
+            _ => self.report_error(&format!("Unrecognised character: {c:?}")),
         }
     }
 
     /// Report the given error message with the current span.
     fn report_error(&self, message: &str) {
-        report_error(self.current_span(), &self.line_offsets, message);
+        crate::lox::report_scanning_error(self.current_span(), message);
     }
 
     /// Return the char pointed to by `self.current`.

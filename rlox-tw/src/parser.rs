@@ -3,7 +3,7 @@
 use crate::{
     ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
     lox::report_token_error,
-    span::{LineOffsets, WithSpan},
+    span::WithSpan,
     tokens::{Token, TokenLiteral, TokenType},
 };
 use std::fmt;
@@ -46,26 +46,15 @@ pub struct Parser<'s> {
     /// The token list that we're parsing.
     tokens: Vec<Token<'s>>,
 
-    /// The line offsets used for finding lines from spans in error messages.
-    pub line_offsets: LineOffsets,
-
     /// The index of the token currently being considered.
     current: usize,
 }
 
 impl<'s> Parser<'s> {
-    /// Create a new parser from the tokens and line offsets.
-    pub fn new(tokens: Vec<Token<'s>>, line_offsets: LineOffsets) -> Self {
-        Self {
-            tokens,
-            line_offsets,
-            current: 0,
-        }
-    }
-
     /// Parse the given list of tokens.
-    pub fn parse(&mut self) -> Option<SpanExpr> {
-        self.parse_expression().ok()
+    pub fn parse(tokens: Vec<Token<'s>>) -> Option<SpanExpr> {
+        let mut parser = Self { tokens, current: 0 };
+        parser.parse_expression().ok()
     }
 
     /// Get the current token.
@@ -123,7 +112,7 @@ impl<'s> Parser<'s> {
             Ok(self.advance())
         } else {
             let token = *self.peek().unwrap();
-            crate::lox::report_token_error(&token, &self.line_offsets, message);
+            crate::lox::report_token_error(&token, message);
             Err(ParseError { token, message })
         }
     }
@@ -367,7 +356,7 @@ impl<'s> Parser<'s> {
         } else {
             let token = *self.peek().unwrap_or(self.previous().unwrap());
             let message = "Expected primary token";
-            report_token_error(&token, &self.line_offsets, message);
+            report_token_error(&token, message);
             Err(ParseError { token, message })
         }
     }
