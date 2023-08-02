@@ -1,5 +1,6 @@
 //! This module handles tokens.
 
+use crate::span::Span;
 use std::fmt;
 
 /// A single token.
@@ -14,14 +15,8 @@ pub struct Token<'s> {
     /// The optional literal part of the token (string or numeric literal).
     pub literal: Option<TokenLiteral<'s>>,
 
-    /// The line that this token is on.
-    pub line: usize,
-
-    /// The column of the start of this token.
-    pub col_start: usize,
-
-    /// The length of this token.
-    pub length: usize,
+    /// The span of the token.
+    pub span: Span,
 }
 
 impl fmt::Display for Token<'_> {
@@ -46,6 +41,7 @@ pub enum TokenLiteral<'s> {
 
 /// A list of all possible Lox tokens.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum TokenType {
     LeftParen,
     RightParen,

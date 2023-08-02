@@ -2,6 +2,7 @@
 
 use crate::{
     lox::report_error,
+    span::{LineOffsets, Span},
     tokens::{Token, TokenLiteral, TokenType},
 };
 
@@ -9,6 +10,9 @@ use crate::{
 pub struct Scanner<'s> {
     /// The source code.
     source: &'s str,
+
+    /// The line offsets used for finding lines from spans in error messages.
+    pub line_offsets: LineOffsets,
 
     /// The tokens that we've already scanned out.
     tokens: Vec<Token<'s>>,
@@ -18,47 +22,53 @@ pub struct Scanner<'s> {
 
     /// An index to the character currently being considered.
     current: usize,
-
-    /// The line that we're currently on.
-    line: usize,
-
-    /// The index of the most recently seen newline character.
-    last_newline: usize,
 }
 
 impl<'s> Scanner<'s> {
-    /// Scan all the tokens from the given source code.
-    pub fn scan_tokens(source: &'s str) -> Vec<Token<'s>> {
-        let mut scanner = Self {
+    /// Create a new scanner to lex the given source code.
+    pub fn new(source: &'s str) -> Self {
+        Self {
             source,
+            line_offsets: LineOffsets::new(source),
             tokens: Vec::new(),
             start: 0,
             current: 0,
-            line: 1,
-            last_newline: 0,
-        };
+        }
+    }
 
-        while !scanner.is_at_end() {
-            scanner.start = scanner.current;
-            scanner.scan_token();
+    /// Scan all the tokens from the given source code.
+    pub fn scan_tokens(&mut self) -> &Vec<Token<'s>> {
+        while !self.is_at_end() {
+            self.start = self.current;
+            self.scan_token();
         }
 
-        scanner.tokens.push(Token {
+        self.tokens.push(Token {
             token_type: TokenType::Eof,
             lexeme: "",
             literal: None,
-            line: scanner.line,
-            col_start: 1,
-            length: 0,
+            span: Span {
+                start: self.current,
+                end: self.current,
+            },
         });
 
-        scanner.tokens
+        &self.tokens
     }
 
     /// Are we at the end of the source code?
     #[inline]
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
+    }
+
+    /// Get the span from the start of this lexeme to the character most recently consumed.
+    #[inline]
+    fn current_span(&self) -> Span {
+        Span {
+            start: self.start,
+            end: self.current - 1,
+        }
     }
 
     /// Scan a single token.
@@ -92,7 +102,7 @@ impl<'s> Scanner<'s> {
                 } else {
                     TokenType::Bang
                 };
-                self.add_token(token_type, None)
+                self.add_token(token_type, None);
             }
             '=' => {
                 let token_type = if self.match_char('=') {
@@ -100,7 +110,7 @@ impl<'s> Scanner<'s> {
                 } else {
                     TokenType::Equal
                 };
-                self.add_token(token_type, None)
+                self.add_token(token_type, None);
             }
             '<' => {
                 let token_type = if self.match_char('=') {
@@ -108,7 +118,7 @@ impl<'s> Scanner<'s> {
                 } else {
                     TokenType::Less
                 };
-                self.add_token(token_type, None)
+                self.add_token(token_type, None);
             }
             '>' => {
                 let token_type = if self.match_char('=') {
@@ -116,14 +126,10 @@ impl<'s> Scanner<'s> {
                 } else {
                     TokenType::Greater
                 };
-                self.add_token(token_type, None)
+                self.add_token(token_type, None);
             }
 
-            '\n' => {
-                self.line += 1;
-                self.last_newline = self.current;
-            }
-            ' ' | '\t' | '\r' => {}
+            ' ' | '\t' | '\r' | '\n' => {}
 
             '"' => self.scan_string(),
 
@@ -131,13 +137,13 @@ impl<'s> Scanner<'s> {
 
             c if c.is_ascii_alphabetic() => self.scan_identifier_or_keyword(),
 
-            _ => report_error(
-                self.line,
-                self.current - self.last_newline,
-                self.current - self.last_newline,
-                &format!("Unrecognied character: {c:?}"),
-            ),
+            _ => self.report_error(&format!("Unrecognied character: {c:?}")),
         }
+    }
+
+    /// Report the given error message with the current span.
+    fn report_error(&self, message: &str) {
+        report_error(self.current_span(), &self.line_offsets, message);
     }
 
     /// Return the char pointed to by `self.current`.
@@ -161,7 +167,7 @@ impl<'s> Scanner<'s> {
             )
         });
         self.current += 1;
-        return c;
+        c
     }
 
     /// Add a token with the given token type and literal to the internal token vec.
@@ -171,9 +177,7 @@ impl<'s> Scanner<'s> {
             token_type,
             lexeme,
             literal,
-            line: self.line,
-            col_start: self.start - self.last_newline,
-            length: self.current - self.start,
+            span: self.current_span(),
         });
     }
 
@@ -190,20 +194,11 @@ impl<'s> Scanner<'s> {
     /// Scan a string literal.
     fn scan_string(&mut self) {
         while self.current_char() != Some('"') && !self.is_at_end() {
-            if self.current_char() == Some('\n') {
-                self.line += 1;
-            }
             self.advance();
         }
 
         if self.is_at_end() {
-            report_error(
-                // Unterminated string literals end in a newline, so we have to ignore that one
-                self.line - 1,
-                self.start - self.last_newline + 1,
-                self.current - self.last_newline - 1,
-                "Unterminated string literal",
-            );
+            self.report_error("Unterminated string literal");
             return;
         }
 
@@ -216,7 +211,7 @@ impl<'s> Scanner<'s> {
                 // Trim the surrounding quotes
                 &self.source[(self.start + 1)..(self.current - 1)],
             )),
-        )
+        );
     }
 
     /// Scan a numeric literal
@@ -243,11 +238,10 @@ impl<'s> Scanner<'s> {
 
     /// Scan a single identifier or keyword.
     fn scan_identifier_or_keyword(&mut self) {
+        /// Check if the given character is valid to be used in an identifier.
         fn is_ident_char(c: Option<char>) -> bool {
-            match c {
-                None => false,
-                Some(c) => c.is_ascii_alphanumeric() || c == '_',
-            }
+            c.map(|c| c.is_ascii_alphanumeric() || c == '_')
+                .unwrap_or(false)
         }
 
         while is_ident_char(self.current_char()) {

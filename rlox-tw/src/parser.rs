@@ -1,8 +1,9 @@
 //! This module provides the [`Parser`].
 
 use crate::{
-    ast::{BinaryOperator, Expr, UnaryOperator},
+    ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
     lox::report_token_error,
+    span::{LineOffsets, WithSpan},
     tokens::{Token, TokenLiteral, TokenType},
 };
 use std::fmt;
@@ -20,7 +21,7 @@ struct ParseError<'s> {
 
 impl fmt::Display for ParseError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -45,15 +46,26 @@ pub struct Parser<'s> {
     /// The token list that we're parsing.
     tokens: Vec<Token<'s>>,
 
+    /// The line offsets used for finding lines from spans in error messages.
+    pub line_offsets: LineOffsets,
+
     /// The index of the token currently being considered.
     current: usize,
 }
 
 impl<'s> Parser<'s> {
+    /// Create a new parser from the tokens and line offsets.
+    pub fn new(tokens: Vec<Token<'s>>, line_offsets: LineOffsets) -> Self {
+        Self {
+            tokens,
+            line_offsets,
+            current: 0,
+        }
+    }
+
     /// Parse the given list of tokens.
-    pub fn parse(tokens: Vec<Token<'s>>) -> Option<Expr> {
-        let mut parser = Self { tokens, current: 0 };
-        parser.parse_expression().ok()
+    pub fn parse(&mut self) -> Option<SpanExpr> {
+        self.parse_expression().ok()
     }
 
     /// Get the current token.
@@ -111,7 +123,7 @@ impl<'s> Parser<'s> {
             Ok(self.advance())
         } else {
             let token = *self.peek().unwrap();
-            crate::lox::report_token_error(&token, message);
+            crate::lox::report_token_error(&token, &self.line_offsets, message);
             Err(ParseError { token, message })
         }
     }
@@ -137,145 +149,190 @@ impl<'s> Parser<'s> {
     }
 
     /// expression → equality ;
-    fn parse_expression(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_expression(&mut self) -> ParseResult<'s, SpanExpr> {
         self.parse_equality()
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn parse_equality(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_equality(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         let mut expr = self.parse_comparison()?;
 
         while self.match_tokens([BangEqual, EqualEqual]) {
-            let operator = match self.previous() {
+            let (value, span) = match self.previous() {
                 Some(Token {
                     token_type: BangEqual,
+                    span,
                     ..
-                }) => BinaryOperator::BangEqual,
+                }) => (BinaryOperator::BangEqual, *span),
                 Some(Token {
                     token_type: EqualEqual,
+                    span,
                     ..
-                }) => BinaryOperator::EqualEqual,
+                }) => (BinaryOperator::EqualEqual, *span),
                 _ => unreachable!(),
             };
+            let operator = WithSpan { span, value };
+
             let right = self.parse_comparison()?;
 
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
         }
 
         Ok(expr)
     }
 
     /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn parse_comparison(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_comparison(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         let mut expr = self.parse_term()?;
 
         while self.match_tokens([Greater, GreaterEqual, Less, LessEqual]) {
-            let operator = match self.previous() {
+            let (value, span) = match self.previous() {
                 Some(Token {
                     token_type: Greater,
+                    span,
                     ..
-                }) => BinaryOperator::Greater,
+                }) => (BinaryOperator::Greater, *span),
                 Some(Token {
                     token_type: GreaterEqual,
+                    span,
                     ..
-                }) => BinaryOperator::GreaterEqual,
+                }) => (BinaryOperator::GreaterEqual, *span),
                 Some(Token {
-                    token_type: Less, ..
-                }) => BinaryOperator::Less,
+                    token_type: Less,
+                    span,
+                    ..
+                }) => (BinaryOperator::Less, *span),
                 Some(Token {
                     token_type: LessEqual,
+                    span,
                     ..
-                }) => BinaryOperator::LessEqual,
+                }) => (BinaryOperator::LessEqual, *span),
                 _ => unreachable!(),
             };
+            let operator = WithSpan { span, value };
+
             let right = self.parse_term()?;
 
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
         }
 
         Ok(expr)
     }
 
     /// term → factor ( ( "-" | "+" ) factor )* ;
-    fn parse_term(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_term(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         let mut expr = self.parse_factor()?;
 
         while self.match_tokens([Minus, Plus]) {
-            let operator = match self.previous() {
+            let (value, span) = match self.previous() {
                 Some(Token {
-                    token_type: Minus, ..
-                }) => BinaryOperator::Minus,
+                    token_type: Minus,
+                    span,
+                    ..
+                }) => (BinaryOperator::Minus, *span),
                 Some(Token {
-                    token_type: Plus, ..
-                }) => BinaryOperator::Plus,
+                    token_type: Plus,
+                    span,
+                    ..
+                }) => (BinaryOperator::Plus, *span),
                 _ => unreachable!(),
             };
+            let operator = WithSpan { span, value };
+
             let right = self.parse_factor()?;
 
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
         }
 
         Ok(expr)
     }
 
     /// factor → unary ( ( "/" | "*" ) unary )* ;
-    fn parse_factor(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_factor(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         let mut expr = self.parse_unary()?;
 
         while self.match_tokens([Slash, Star]) {
-            let operator = match self.previous() {
+            let (value, span) = match self.previous() {
                 Some(Token {
-                    token_type: Slash, ..
-                }) => BinaryOperator::Slash,
+                    token_type: Slash,
+                    span,
+                    ..
+                }) => (BinaryOperator::Slash, *span),
                 Some(Token {
-                    token_type: Star, ..
-                }) => BinaryOperator::Star,
+                    token_type: Star,
+                    span,
+                    ..
+                }) => (BinaryOperator::Star, *span),
                 _ => unreachable!(),
             };
+            let operator = WithSpan { span, value };
+
             let right = self.parse_unary()?;
 
-            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Binary(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
         }
 
         Ok(expr)
     }
 
     /// unary → ( "!" | "-" ) unary | primary ;
-    fn parse_unary(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_unary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         if self.match_tokens([Bang, Minus]) {
-            let operator = match self.previous() {
+            let (value, span) = match self.previous() {
                 Some(Token {
-                    token_type: Bang, ..
-                }) => UnaryOperator::Bang,
+                    token_type: Bang,
+                    span,
+                    ..
+                }) => (UnaryOperator::Bang, *span),
                 Some(Token {
-                    token_type: Minus, ..
-                }) => UnaryOperator::Minus,
+                    token_type: Minus,
+                    span,
+                    ..
+                }) => (UnaryOperator::Minus, *span),
                 _ => unreachable!(),
             };
+            let operator = WithSpan { span, value };
+
             let right = self.parse_unary()?;
 
-            Ok(Expr::Unary(operator, Box::new(right)))
+            let span = operator.span.union(&right.span);
+            let value = Expr::Unary(operator, Box::new(right));
+            Ok(WithSpan { span, value })
         } else {
             self.parse_primary()
         }
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
-    fn parse_primary(&mut self) -> ParseResult<'s, Expr> {
+    fn parse_primary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         if self.match_tokens([True, False, Nil, Number, String, LeftParen]) {
-            Ok(match self.previous() {
+            let previous = self.previous();
+
+            let span = match previous {
+                Some(Token { span, .. }) => *span,
+                _ => unreachable!(),
+            };
+            let value = match previous {
                 Some(Token {
                     token_type: True, ..
                 }) => Expr::Boolean(true),
@@ -304,11 +361,13 @@ impl<'s> Parser<'s> {
                     Expr::Grouping(Box::new(expr))
                 }
                 _ => unreachable!(),
-            })
+            };
+
+            Ok(WithSpan { span, value })
         } else {
             let token = *self.peek().unwrap_or(self.previous().unwrap());
             let message = "Expected primary token";
-            report_token_error(&token, message);
+            report_token_error(&token, &self.line_offsets, message);
             Err(ParseError { token, message })
         }
     }

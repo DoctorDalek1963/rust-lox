@@ -1,8 +1,11 @@
 //! This module handles the AST.
 
+use crate::span::WithSpan;
 use std::fmt;
 
+/// A binary operator - includes arithmetic and comparison.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum BinaryOperator {
     Slash,
     Star,
@@ -37,7 +40,9 @@ impl fmt::Display for BinaryOperator {
     }
 }
 
+/// A binary logic operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum LogicalOperator {
     And,
     Or,
@@ -56,7 +61,9 @@ impl fmt::Display for LogicalOperator {
     }
 }
 
+/// A unary operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum UnaryOperator {
     Bang,
     Minus,
@@ -75,14 +82,18 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
+/// An [`Expr`] wrapped in [`WithSpan`].
+pub type SpanExpr = WithSpan<Expr>;
+
 /// A list of all the possible expressions.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum Expr {
     Nil,
     Boolean(bool),
-    Binary(Box<Expr>, BinaryOperator, Box<Expr>),
-    Grouping(Box<Expr>),
+    Binary(Box<SpanExpr>, WithSpan<BinaryOperator>, Box<SpanExpr>),
+    Grouping(Box<SpanExpr>),
     String(String),
     Number(f64),
-    Unary(UnaryOperator, Box<Expr>),
+    Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
 }

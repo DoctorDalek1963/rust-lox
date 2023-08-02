@@ -1,9 +1,14 @@
 //! This module provides [`LoxObject`].
 
+use crate::span::WithSpan;
 use std::fmt;
+
+/// A [`LoxObject`] wrapped in [`WithSpan`].
+pub type SpanObject = WithSpan<LoxObject>;
 
 /// Possible objects in Lox.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub enum LoxObject {
     Nil,
     Boolean(bool),
@@ -27,6 +32,7 @@ impl fmt::Display for LoxObject {
 }
 
 impl LoxObject {
+    /// Get the name of the type of this object.
     pub fn type_name(&self) -> String {
         use LoxObject::*;
 

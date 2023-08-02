@@ -8,6 +8,7 @@ pub(crate) mod object;
 pub(crate) mod parser;
 pub(crate) mod pretty_printers;
 pub(crate) mod scanner;
+pub(crate) mod span;
 pub(crate) mod tokens;
 
 use color_eyre::Result;

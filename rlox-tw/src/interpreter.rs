@@ -1,9 +1,10 @@
 //! This module provides [`TwInterpreter`].
 
 use crate::{
-    ast::{BinaryOperator, Expr, UnaryOperator},
-    lox::print_error_message,
-    object::LoxObject,
+    ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
+    lox::report_error,
+    object::{LoxObject, SpanObject},
+    span::{LineOffsets, Span, WithSpan},
 };
 use std::fmt;
 use thiserror::Error;
@@ -13,6 +14,9 @@ use thiserror::Error;
 struct RuntimeError {
     /// The error message.
     message: String,
+
+    /// The span where the error occurred.
+    span: Span,
 }
 
 /// A result wrapping a [`RuntimeError`].
@@ -29,46 +33,85 @@ pub struct TwInterpreter {}
 
 impl TwInterpreter {
     /// Interpret the given AST.
-    pub fn interpret(expr: &Expr) -> Option<LoxObject> {
+    pub fn interpret(expr: &SpanExpr, line_offsets: &LineOffsets) -> Option<SpanObject> {
         let mut interpreter = Self {};
 
         match interpreter.evaluate(expr) {
             Ok(obj) => Some(obj),
             Err(e) => {
-                print_error_message(None, &e.message);
+                report_error(e.span, line_offsets, &e.message);
                 None
             }
         }
     }
 
     /// Evaluate the given expression.
-    fn evaluate(&mut self, expr: &Expr) -> Result<LoxObject> {
-        Ok(match expr {
+    fn evaluate(&mut self, expr: &SpanExpr) -> Result<SpanObject> {
+        let WithSpan {
+            mut span,
+            value: expr,
+        } = expr;
+
+        let value = match expr {
             Expr::Nil => LoxObject::Nil,
             Expr::Boolean(b) => LoxObject::Boolean(*b),
             Expr::Binary(left, operator, right) => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
-                self.evaluate_binary_expression(*operator, left, right)?
+                let WithSpan {
+                    span: new_span,
+                    value,
+                } = self.evaluate_binary_expression(*operator, left, right)?;
+                span = new_span;
+                value
             }
-            Expr::Grouping(expr) => self.evaluate(expr)?,
+            Expr::Grouping(expr) => {
+                let WithSpan {
+                    span: new_span,
+                    value,
+                } = self.evaluate(expr)?;
+                span = new_span;
+                value
+            }
             Expr::String(string) => LoxObject::String(string.clone()),
             Expr::Number(number) => LoxObject::Number(*number),
             Expr::Unary(operator, expr) => {
                 let value = self.evaluate(expr)?;
-                self.evaluate_unary_expression(*operator, value)?
+                let WithSpan {
+                    span: new_span,
+                    value,
+                } = self.evaluate_unary_expression(*operator, value)?;
+                span = new_span;
+                value
             }
-        })
+        };
+
+        Ok(WithSpan { span, value })
     }
 
+    /// Evaluate a binary expression.
     fn evaluate_binary_expression(
         &mut self,
-        operator: BinaryOperator,
-        left: LoxObject,
-        right: LoxObject,
-    ) -> Result<LoxObject> {
+        operator: WithSpan<BinaryOperator>,
+        left: SpanObject,
+        right: SpanObject,
+    ) -> Result<SpanObject> {
         use BinaryOperator::*;
         use LoxObject::*;
+
+        let WithSpan {
+            span: left_span,
+            value: left,
+        } = left;
+        let WithSpan {
+            span: right_span,
+            value: right,
+        } = right;
+        let WithSpan {
+            span: op_span,
+            value: operator,
+        } = operator;
+        let span = left_span.union(&right_span).union(&op_span);
 
         let unsupported = || {
             Err(RuntimeError {
@@ -78,11 +121,12 @@ impl TwInterpreter {
                     left.type_name(),
                     right.type_name()
                 ),
+                span,
             })
         };
 
-        match (&left, &right) {
-            (Number(a), Number(b)) => Ok(match operator {
+        let value = match (&left, &right) {
+            (Number(a), Number(b)) => match operator {
                 Slash => Number(a / b),
                 Star => Number(a * b),
                 Plus => Number(a + b),
@@ -93,34 +137,44 @@ impl TwInterpreter {
                 LessEqual => Boolean(a <= b),
                 BangEqual => Boolean(a != b),
                 EqualEqual => Boolean(a == b),
-            }),
+            },
             (String(a), String(b)) => match operator {
-                Plus => Ok(String(a.clone() + b)),
-                EqualEqual => Ok(Boolean(a == b)),
-                BangEqual => Ok(Boolean(a != b)),
-                _ => unsupported(),
+                Plus => String(a.clone() + b),
+                EqualEqual => Boolean(a == b),
+                BangEqual => Boolean(a != b),
+                _ => unsupported()?,
             },
             (Nil, Nil) => match operator {
-                EqualEqual => Ok(Boolean(true)),
-                BangEqual => Ok(Boolean(false)),
-                _ => unsupported(),
+                EqualEqual => Boolean(true),
+                BangEqual => Boolean(false),
+                _ => unsupported()?,
             },
             (Boolean(a), Boolean(b)) => match operator {
-                EqualEqual => Ok(Boolean(a == b)),
-                BangEqual => Ok(Boolean(a != b)),
-                _ => unsupported(),
+                EqualEqual => Boolean(a == b),
+                BangEqual => Boolean(a != b),
+                _ => unsupported()?,
             },
-            _ => unsupported(),
-        }
+            _ => unsupported()?,
+        };
+
+        Ok(WithSpan { span, value })
     }
 
+    /// Evaluate a unary expression.
     fn evaluate_unary_expression(
         &mut self,
-        operator: UnaryOperator,
-        value: LoxObject,
-    ) -> Result<LoxObject> {
+        operator: WithSpan<UnaryOperator>,
+        object: SpanObject,
+    ) -> Result<SpanObject> {
         use LoxObject::*;
         use UnaryOperator::*;
+
+        let WithSpan { span, value } = object;
+        let WithSpan {
+            span: op_span,
+            value: operator,
+        } = operator;
+        let span = span.union(&op_span);
 
         let unsupported = || {
             Err(RuntimeError {
@@ -129,14 +183,17 @@ impl TwInterpreter {
                     operator.to_string(),
                     value.type_name(),
                 ),
+                span,
             })
         };
 
-        match (operator, &value) {
-            (Bang, val) => Ok(Boolean(!self.is_truthy(val))),
-            (Minus, Number(n)) => Ok(Number(-*n)),
-            _ => unsupported(),
-        }
+        let value = match (operator, &value) {
+            (Bang, val) => Boolean(!self.is_truthy(val)),
+            (Minus, Number(n)) => Number(-*n),
+            _ => unsupported()?,
+        };
+
+        Ok(WithSpan { span, value })
     }
 
     /// Check if the given object is truthy.

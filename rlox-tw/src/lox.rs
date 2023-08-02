@@ -5,6 +5,7 @@ use crate::{
     parser::Parser,
     pretty_printers::{ParenPrinter, RpnPrinter},
     scanner::Scanner,
+    span::{LineOffsets, Span},
     tokens::{Token, TokenType},
 };
 use rustyline::{error::ReadlineError, DefaultEditor};
@@ -75,9 +76,12 @@ impl LoxInterpreter {
     fn run_code(&mut self, code: &str) {
         debug!(?code);
 
-        let tokens = Scanner::scan_tokens(code);
+        let mut scanner = Scanner::new(code);
+        let tokens = scanner.scan_tokens();
+
         debug!(?tokens);
-        let expr = match Parser::parse(tokens) {
+        let mut parser = Parser::new(tokens.clone(), scanner.line_offsets);
+        let expr = match parser.parse() {
             Some(expr) => expr,
             None => return,
         };
@@ -86,39 +90,42 @@ impl LoxInterpreter {
         debug!(parens = ParenPrinter::print(&expr));
         debug!(rpn = RpnPrinter::print(&expr));
 
-        if let Some(output) = TwInterpreter::interpret(&expr) {
-            println!("{}", output);
+        if let Some(output) = TwInterpreter::interpret(&expr, &parser.line_offsets) {
+            println!("{}", output.value);
         }
     }
 }
 
 /// Report the error with the given details.
-pub fn report_error(line: usize, col_start: usize, col_end: usize, message: &str) {
-    print_error_message(
-        Some(&format!("[line {line}, cols {col_start}:{col_end}]")),
-        message,
-    );
+pub fn report_error(span: Span, line_offsets: &LineOffsets, message: &str) {
+    let (start_line, start_nl) = line_offsets.line_and_newline_offset(span.start);
+    let (end_line, end_nl) = line_offsets.line_and_newline_offset(span.end);
+    let start_col = span.start - start_nl + 1;
+    let end_col = span.end - end_nl + 1;
+
+    let prefix = if start_line == end_line {
+        format!("[line {start_line}, cols {start_col} to {end_col}]")
+    } else {
+        format!("[{start_line}:{start_col} to {end_line}:{end_col}]")
+    };
+
+    print_error_message(Some(&prefix), message);
     HAD_ERROR.store(true, Ordering::Relaxed);
 }
 
 /// Report an error at the given token with the given message.
-pub fn report_token_error(token: &Token<'_>, message: &str) {
+pub fn report_token_error(token: &Token<'_>, line_offsets: &LineOffsets, message: &str) {
     let string = if token.token_type == TokenType::Eof {
-        format!("at end {message}")
+        format!("at end: {message}")
     } else {
-        format!("at '{}' {message}", token.lexeme)
+        format!("at '{}': {message}", token.lexeme)
     };
 
-    report_error(
-        token.line,
-        token.col_start,
-        token.col_start + token.length,
-        &string,
-    )
+    report_error(token.span, line_offsets, &string)
 }
 
 /// Print the given error message.
-pub fn print_error_message(prefix: Option<&str>, message: &str) {
+fn print_error_message(prefix: Option<&str>, message: &str) {
     use crossterm::{
         execute,
         style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
