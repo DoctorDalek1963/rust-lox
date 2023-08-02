@@ -11,7 +11,7 @@ use crate::{
 use lazy_static::lazy_static;
 use rustyline::{error::ReadlineError, DefaultEditor};
 use std::{
-    fs, io,
+    cmp, fs, io,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -29,7 +29,10 @@ static HAD_RUNTIME_ERROR: AtomicBool = AtomicBool::new(false);
 
 lazy_static! {
     /// The LineOffsets of the code being worked with.
-    pub(crate) static ref LINE_OFFSETS: RwLock<LineOffsets> = RwLock::new(LineOffsets::new(""));
+    static ref LINE_OFFSETS: RwLock<LineOffsets> = RwLock::new(LineOffsets::new(""));
+
+    /// The source code that we're working with.
+    static ref SOURCE_CODE: RwLock<String> = RwLock::new(String::new());
 }
 
 /// The Lox interpreter.
@@ -54,7 +57,7 @@ impl LoxInterpreter {
         self.run_code(&fs::read_to_string(path)?);
 
         if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
-            eprintln!("TODO: Report error properly and return Err()");
+            //eprintln!("TODO: Report error properly and return Err()");
         }
 
         Ok(())
@@ -89,6 +92,9 @@ impl LoxInterpreter {
     fn run_code(&mut self, code: &str) {
         debug!(?code);
 
+        *SOURCE_CODE.write().unwrap() = code.to_string();
+        *LINE_OFFSETS.write().unwrap() = LineOffsets::new(code);
+
         let tokens = Scanner::scan_tokens(code);
 
         debug!(?tokens);
@@ -115,72 +121,130 @@ pub fn report_token_error(token: &Token<'_>, message: &str) {
         format!("at '{}': {message}", token.lexeme)
     };
 
-    report_error(token.span, &string);
+    print_error_message(Some(token.span), &string);
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
 /// Report an error during the scanning of source code.
 pub fn report_scanning_error(span: Span, message: &str) {
-    report_error(span, message);
+    print_error_message(Some(span), message);
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
+/// Report an error at runtime.
 pub fn report_runtime_error(span: Span, message: &str) {
-    report_error(span, message);
+    print_error_message(Some(span), message);
     HAD_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
-/// Report the error with the given details.
-fn report_error(span: Span, message: &str) {
-    let (start_line, start_nl) = LINE_OFFSETS
-        .read()
-        .unwrap()
-        .line_and_newline_offset(span.start);
-    let (end_line, end_nl) = LINE_OFFSETS
-        .read()
-        .unwrap()
-        .line_and_newline_offset(span.end);
-    let start_col = span.start - start_nl + 1;
-    let end_col = span.end - end_nl + 1;
+// Report the error with the given details.
+//fn report_error(span: Span, message: &str) {
 
-    let prefix = if start_line == end_line {
-        format!("[line {start_line}, cols {start_col} to {end_col}]")
-    } else {
-        format!("[{start_line}:{start_col} to {end_line}:{end_col}]")
-    };
+//let message = if start_line == end_line {
+//format!("{message}\n{:?}", SOURCE_CODE.read().unwrap())
+//} else {
+//format!("[{start_line}:{start_col} to {end_line}:{end_col}]")
+//};
 
-    print_error_message(Some(&prefix), message);
-}
+//print_error_message(&message, Some(span));
+//}
 
 /// Print the given error message.
-fn print_error_message(prefix: Option<&str>, message: &str) {
+fn print_error_message(span: Option<Span>, message: &str) {
     use crossterm::{
         execute,
         style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
     };
     use std::io::stderr;
 
-    if let Some(prefix) = prefix {
-        execute!(
-            stderr(),
-            Print(format!("{prefix} ")),
-            SetForegroundColor(Color::Red),
-            SetAttribute(Attribute::Bold),
-            Print("ERROR"),
-            ResetColor,
-            SetAttribute(Attribute::Reset),
-            Print(format!(": {message}\n"))
-        )
+    let message = if let Some(span) = span {
+        let (start_line, start_nl) = LINE_OFFSETS
+            .read()
+            .unwrap()
+            .line_and_newline_offset(span.start);
+        let (end_line, end_nl) = LINE_OFFSETS
+            .read()
+            .unwrap()
+            .line_and_newline_offset(span.end);
+        let start_col = span.start - start_nl + 1;
+        let end_col = span.end - end_nl + 1;
+        let line_number_width =
+            cmp::max(start_line.to_string().len(), end_line.to_string().len()) + 1;
+
+        if start_line == end_line {
+            let mut message = format!(": {message}\n");
+            message.push_str(&format!(
+                "{:width$}{}{}-->{}{} {start_line}:{start_col}\n",
+                "",
+                SetForegroundColor(Color::Blue),
+                Attribute::Bold,
+                ResetColor,
+                Attribute::Reset,
+                width = line_number_width - 1,
+            ));
+            message.push_str(&format!(
+                "{}{}{:line_number_width$}|{}{}\n",
+                SetForegroundColor(Color::Blue),
+                Attribute::Bold,
+                "",
+                ResetColor,
+                Attribute::Reset,
+            ));
+            message.push_str(&format!(
+                "{}{}{start_line}{:width$}|{}{} ",
+                SetForegroundColor(Color::Blue),
+                Attribute::Bold,
+                "",
+                ResetColor,
+                Attribute::Reset,
+                width = line_number_width - start_line.to_string().len(),
+            ));
+            message.push_str(
+                &SOURCE_CODE
+                    .read()
+                    .unwrap()
+                    .lines()
+                    .nth(start_line.saturating_sub(1))
+                    .unwrap(),
+            );
+            message.push('\n');
+            message.push_str(&format!(
+                "{}{}{:line_number_width$}|{}{} ",
+                SetForegroundColor(Color::Blue),
+                Attribute::Bold,
+                "",
+                ResetColor,
+                Attribute::Reset,
+            ));
+            message.push_str(&format!(
+                "{}{}{:space_width$}{:^<caret_width$}{}{}",
+                SetForegroundColor(Color::Red),
+                Attribute::Bold,
+                "",
+                "",
+                ResetColor,
+                Attribute::Reset,
+                space_width = start_col.saturating_sub(1),
+                caret_width = end_col - start_col + 1,
+            ));
+            message.push_str("\n\n");
+
+            message
+        } else {
+            todo!()
+        }
     } else {
-        execute!(
-            stderr(),
-            SetForegroundColor(Color::Red),
-            SetAttribute(Attribute::Bold),
-            Print("ERROR"),
-            ResetColor,
-            SetAttribute(Attribute::Reset),
-            Print(format!(": {message}\n"))
-        )
-    }
-    .unwrap();
+        format!(": {message}\n")
+    };
+
+    execute!(
+        stderr(),
+        SetForegroundColor(Color::Red),
+        SetAttribute(Attribute::Bold),
+        Print("ERROR"),
+        ResetColor,
+        SetAttribute(Attribute::Reset),
+        Print(message)
+    )
+    .expect("Should be able to print error messages with crossterm");
 }

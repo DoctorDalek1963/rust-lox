@@ -1,8 +1,7 @@
 //! This module handles scanning source code to produce tokens.
 
 use crate::{
-    lox::LINE_OFFSETS,
-    span::{LineOffsets, Span},
+    span::Span,
     tokens::{Token, TokenLiteral, TokenType},
 };
 
@@ -24,8 +23,6 @@ pub struct Scanner<'s> {
 impl<'s> Scanner<'s> {
     /// Scan all the tokens from the given source code.
     pub fn scan_tokens(source: &'s str) -> Vec<Token<'s>> {
-        *LINE_OFFSETS.write().unwrap() = LineOffsets::new(source);
-
         let mut scanner = Self {
             source,
             tokens: Vec::new(),
