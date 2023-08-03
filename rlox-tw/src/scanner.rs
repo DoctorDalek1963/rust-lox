@@ -232,8 +232,7 @@ impl<'s> Scanner<'s> {
     fn scan_identifier_or_keyword(&mut self) {
         /// Check if the given character is valid to be used in an identifier.
         fn is_ident_char(c: Option<char>) -> bool {
-            c.map(|c| c.is_ascii_alphanumeric() || c == '_')
-                .unwrap_or(false)
+            c.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
         }
 
         while is_ident_char(self.current_char()) {

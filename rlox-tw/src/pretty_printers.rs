@@ -47,7 +47,7 @@ impl RpnPrinter {
             Expr::Grouping(expr) => format!("({})", Self::print(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
-            Expr::Unary(operator, expr) => format!("{} {}", operator.value, Self::print(expr)),
+            Expr::Unary(operator, expr) => format!("{} {}", Self::print(expr), operator.value),
         }
     }
 }

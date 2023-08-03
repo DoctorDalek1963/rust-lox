@@ -98,9 +98,8 @@ impl LoxInterpreter {
         let tokens = Scanner::scan_tokens(code);
 
         debug!(?tokens);
-        let expr = match Parser::parse(tokens) {
-            Some(expr) => expr,
-            None => return,
+        let Some(expr) = Parser::parse(tokens) else {
+            return;
         };
 
         debug!(?expr);
@@ -194,7 +193,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 width = line_number_width - start_line.to_string().len(),
             ));
             message.push_str(
-                &SOURCE_CODE
+                SOURCE_CODE
                     .read()
                     .unwrap()
                     .lines()

@@ -187,21 +187,11 @@ impl TwInterpreter {
         };
 
         let value = match (operator, &value) {
-            (Bang, val) => Boolean(!self.is_truthy(val)),
+            (Bang, val) => Boolean(!val.is_truthy()),
             (Minus, Number(n)) => Number(-*n),
             _ => unsupported()?,
         };
 
         Ok(WithSpan { span, value })
-    }
-
-    /// Check if the given object is truthy.
-    fn is_truthy(&self, object: &LoxObject) -> bool {
-        use LoxObject::*;
-
-        match object {
-            Nil | Boolean(false) => false,
-            _ => true,
-        }
     }
 }

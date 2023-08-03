@@ -382,7 +382,7 @@ impl<'s> Parser<'s> {
 
             Ok(WithSpan { span, value })
         } else {
-            let token = *self.peek().unwrap_or(self.previous().unwrap());
+            let token = *self.peek().unwrap_or_else(|| self.previous().unwrap());
             let message = format!("Expected primary token, got {:?}", token.token_type);
             Err(ParseError {
                 token,

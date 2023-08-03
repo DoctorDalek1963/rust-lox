@@ -23,11 +23,11 @@ impl fmt::Display for LoxObject {
         let string = match self {
             Nil => "nil".to_string(),
             Boolean(b) => b.to_string(),
-            String(s) => s.clone(),
+            String(s) => format!("{s:?}"),
             Number(n) => n.to_string(),
         };
 
-        write!(f, "{}", string)
+        write!(f, "{string}")
     }
 }
 
@@ -41,6 +41,14 @@ impl LoxObject {
             Boolean(_) => "boolean".to_string(),
             String(_) => "string".to_string(),
             Number(_) => "number".to_string(),
+        }
+    }
+
+    /// Is this object truthy?
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Self::Nil | Self::Boolean(false) => false,
+            _ => true,
         }
     }
 }
