@@ -11,6 +11,7 @@ license.workspace = true
 [dependencies]
 color-eyre.workspace = true
 crossterm = "0.26.1"
+home = "0.5.5"
 lazy_static = "1.4.0"
 rustyline.workspace = true
 thiserror.workspace = true

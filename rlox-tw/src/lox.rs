@@ -36,8 +36,11 @@ lazy_static! {
 }
 
 /// The Lox interpreter.
-#[derive(Clone, Copy, Debug)]
-pub struct LoxInterpreter;
+#[derive(Clone, Debug)]
+pub struct LoxInterpreter {
+    /// The core interpreter implementation to use.
+    interpreter: TwInterpreter,
+}
 
 /// An error that can be returned from [`LoxInterpreter::run_prompt`].
 #[derive(Debug, Error)]
@@ -52,6 +55,13 @@ pub enum PromptError {
 }
 
 impl LoxInterpreter {
+    /// Create a new interpreter.
+    pub fn new() -> Self {
+        Self {
+            interpreter: TwInterpreter::new(),
+        }
+    }
+
     /// Read the file and run the contents.
     pub fn run_file(&mut self, path: impl AsRef<Path>) -> io::Result<()> {
         self.run_code(&fs::read_to_string(path)?);
@@ -67,10 +77,23 @@ impl LoxInterpreter {
     pub fn run_prompt(&mut self) -> Result<(), PromptError> {
         let mut prompt = DefaultEditor::new()?;
 
+        let history_file =
+            home::home_dir().map(|home| home.join(".config").join("rlox").join(".history"));
+        if let Some(history_file) = &history_file {
+            if let Ok(false) = fs::try_exists(history_file) {
+                fs::create_dir_all(history_file.parent().unwrap())?;
+                fs::File::create_new(history_file)?;
+            }
+            prompt.load_history(&history_file)?;
+        }
+
         loop {
             match prompt.readline("> ") {
                 Ok(mut line) => {
                     prompt.add_history_entry(&line)?;
+                    if let Some(history_file) = &history_file {
+                        prompt.save_history(history_file)?;
+                    }
                     line.push('\n');
                     self.run_code(&line);
 
@@ -106,7 +129,7 @@ impl LoxInterpreter {
         debug!(parens = ParenPrinter::print(&expr));
         debug!(rpn = RpnPrinter::print(&expr));
 
-        if let Some(output) = TwInterpreter::interpret(&expr) {
+        if let Some(output) = self.interpreter.interpret(&expr) {
             println!("{}", output.value);
         }
     }

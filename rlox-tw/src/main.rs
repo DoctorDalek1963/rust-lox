@@ -1,6 +1,9 @@
 //! This crate contains a tree-walk interpreter for Lox, as described in
 //! <https://craftinginterpreters.com/a-tree-walk-interpreter.html>.
 
+#![feature(file_create_new)]
+#![feature(fs_try_exists)]
+
 pub(crate) mod ast;
 pub(crate) mod interpreter;
 pub(crate) mod lox;
@@ -30,7 +33,7 @@ fn main() -> Result<()> {
         ),
     )?;
 
-    let mut interpreter = lox::LoxInterpreter;
+    let mut interpreter = lox::LoxInterpreter::new();
 
     match args().nth(1) {
         Some(path) => interpreter.run_file(path)?,

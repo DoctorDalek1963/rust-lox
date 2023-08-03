@@ -28,14 +28,18 @@ impl fmt::Display for RuntimeError {
 }
 
 /// A tree-walk Lox interpreter.
+#[derive(Clone, Debug, PartialEq)]
 pub struct TwInterpreter {}
 
 impl TwInterpreter {
-    /// Interpret the given AST.
-    pub fn interpret(expr: &SpanExpr) -> Option<SpanObject> {
-        let mut interpreter = Self {};
+    /// Create a new tree-walk interpreter.
+    pub fn new() -> Self {
+        Self {}
+    }
 
-        match interpreter.evaluate(expr) {
+    /// Interpret the given AST.
+    pub fn interpret(&mut self, expr: &SpanExpr) -> Option<SpanObject> {
+        match self.evaluate(expr) {
             Ok(obj) => Some(obj),
             Err(e) => {
                 crate::lox::report_runtime_error(e.span, &e.message);

@@ -457,6 +457,7 @@ version = "0.1.0-dev"
 dependencies = [
  "color-eyre",
  "crossterm",
+ "home",
  "lazy_static",
  "rustyline",
  "thiserror",
