@@ -126,7 +126,16 @@ impl TwInterpreter {
 
         let value = match (&left, &right) {
             (Number(a), Number(b)) => match operator {
-                Slash => Number(a / b),
+                Slash => {
+                    if *b == 0.0 {
+                        return Err(RuntimeError {
+                            message: "Division by 0".to_string(),
+                            span,
+                        });
+                    } else {
+                        Number(a / b)
+                    }
+                }
                 Star => Number(a * b),
                 Plus => Number(a + b),
                 Minus => Number(a - b),
