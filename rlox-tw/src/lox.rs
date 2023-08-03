@@ -121,17 +121,13 @@ impl LoxInterpreter {
         let tokens = Scanner::scan_tokens(code);
 
         debug!(?tokens);
-        let Some(expr) = Parser::parse(tokens) else {
-            return;
-        };
+        let stmts = Parser::parse(tokens);
 
-        debug!(?expr);
-        debug!(parens = ParenPrinter::print(&expr));
-        debug!(rpn = RpnPrinter::print(&expr));
+        debug!(?stmts);
+        debug!(parens = %ParenPrinter::print_stmts(&stmts));
+        debug!(rpn = %RpnPrinter::print_stmts(&stmts));
 
-        if let Some(output) = self.interpreter.interpret(&expr) {
-            println!("{}", output.value);
-        }
+        self.interpreter.interpret(&stmts);
     }
 }
 

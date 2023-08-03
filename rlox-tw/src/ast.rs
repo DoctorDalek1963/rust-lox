@@ -97,3 +97,14 @@ pub enum Expr {
     Number(f64),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
 }
+
+/// An [`Stmt`] wrapped in [`WithSpan`].
+pub type SpanStmt = WithSpan<Stmt>;
+
+/// A list of all the possible statements.
+#[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::missing_docs_in_private_items)]
+pub enum Stmt {
+    Expression(SpanExpr),
+    Print(SpanExpr),
+}

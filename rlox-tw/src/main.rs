@@ -3,6 +3,7 @@
 
 #![feature(file_create_new)]
 #![feature(fs_try_exists)]
+#![feature(iter_intersperse)]
 
 pub(crate) mod ast;
 pub(crate) mod interpreter;

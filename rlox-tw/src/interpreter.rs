@@ -1,7 +1,7 @@
 //! This module provides [`TwInterpreter`].
 
 use crate::{
-    ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
+    ast::{BinaryOperator, Expr, SpanExpr, SpanStmt, Stmt, UnaryOperator},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
@@ -37,19 +37,35 @@ impl TwInterpreter {
         Self {}
     }
 
-    /// Interpret the given AST.
-    pub fn interpret(&mut self, expr: &SpanExpr) -> Option<SpanObject> {
-        match self.evaluate(expr) {
-            Ok(obj) => Some(obj),
-            Err(e) => {
-                crate::lox::report_runtime_error(e.span, &e.message);
-                None
-            }
+    /// Interpret the given AST, reporting a runtime error if one occurs.
+    pub fn interpret(&mut self, stmts: &[SpanStmt]) {
+        if let Err(e) = self.execute_statements(stmts) {
+            crate::lox::report_runtime_error(e.span, &e.message);
         }
     }
 
+    /// Execute the given statements.
+    fn execute_statements(&mut self, stmts: &[SpanStmt]) -> Result<()> {
+        for stmt in stmts {
+            self.execute_statement(stmt)?;
+        }
+        Ok(())
+    }
+
+    /// Execute the given statement.
+    fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
+        match &stmt.value {
+            Stmt::Expression(expr) => {
+                self.evaluate_expression(expr)?;
+            }
+            Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
+        }
+
+        Ok(())
+    }
+
     /// Evaluate the given expression.
-    fn evaluate(&mut self, expr: &SpanExpr) -> Result<SpanObject> {
+    fn evaluate_expression(&mut self, expr: &SpanExpr) -> Result<SpanObject> {
         let WithSpan {
             mut span,
             value: expr,
@@ -59,8 +75,8 @@ impl TwInterpreter {
             Expr::Nil => LoxObject::Nil,
             Expr::Boolean(b) => LoxObject::Boolean(*b),
             Expr::Binary(left, operator, right) => {
-                let left = self.evaluate(left)?;
-                let right = self.evaluate(right)?;
+                let left = self.evaluate_expression(left)?;
+                let right = self.evaluate_expression(right)?;
                 let WithSpan {
                     span: new_span,
                     value,
@@ -72,14 +88,14 @@ impl TwInterpreter {
                 let WithSpan {
                     span: new_span,
                     value,
-                } = self.evaluate(expr)?;
+                } = self.evaluate_expression(expr)?;
                 span = new_span;
                 value
             }
             Expr::String(string) => LoxObject::String(string.clone()),
             Expr::Number(number) => LoxObject::Number(*number),
             Expr::Unary(operator, expr) => {
-                let value = self.evaluate(expr)?;
+                let value = self.evaluate_expression(expr)?;
                 let WithSpan {
                     span: new_span,
                     value,

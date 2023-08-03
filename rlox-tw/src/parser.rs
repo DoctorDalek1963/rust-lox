@@ -1,7 +1,7 @@
 //! This module provides the [`Parser`].
 
 use crate::{
-    ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
+    ast::{BinaryOperator, Expr, SpanExpr, SpanStmt, Stmt, UnaryOperator},
     lox::{report_non_runtime_error, report_token_error},
     span::{Span, WithSpan},
     tokens::{Token, TokenLiteral, TokenType},
@@ -35,15 +35,19 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 ///
 /// It parses this grammar:
 /// ```text
+/// program    → statement* EOF ;
+///
+/// statement  → exprStmt | printStmt ;
+/// exprStmt   → expression ";" ;
+/// printStmt  → "print" expression ";" ;
+///
 /// expression → equality ;
 /// equality   → comparison ( ( "!=" | "==" ) comparison )* ;
 /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 /// term       → factor ( ( "-" | "+" ) factor )* ;
 /// factor     → unary ( ( "/" | "*" ) unary )* ;
-/// unary      → ( "!" | "-" ) unary
-///              | primary ;
-/// primary    → NUMBER | STRING | "true" | "false" | "nil"
-///              | "(" expression ")" ;
+/// unary      → ( "!" | "-" ) unary | primary ;
+/// primary    → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 /// ```
 pub struct Parser<'s> {
     /// The token list that we're parsing.
@@ -51,30 +55,37 @@ pub struct Parser<'s> {
 
     /// The index of the token currently being considered.
     current: usize,
+
+    /// The statements that have been parsed by the parser.
+    statements: Vec<SpanStmt>,
 }
 
 impl<'s> Parser<'s> {
     /// Parse the given list of tokens.
-    pub fn parse(tokens: Vec<Token<'s>>) -> Option<SpanExpr> {
-        let mut parser = Self { tokens, current: 0 };
-        match parser.parse_expression() {
-            Ok(span_expr) => Some(span_expr),
-            Err(error) => {
-                match error {
-                    ParseError {
-                        token,
-                        previous_span: Some(span),
-                        message,
-                    } => report_non_runtime_error(span.union(&token.span), &message),
-                    ParseError {
-                        token,
-                        previous_span: None,
-                        message,
-                    } => report_token_error(&token, &message),
-                };
-                None
-            }
-        }
+    pub fn parse(tokens: Vec<Token<'s>>) -> Vec<SpanStmt> {
+        let mut parser = Self {
+            tokens,
+            current: 0,
+            statements: vec![],
+        };
+
+        match parser.parse_program() {
+            Ok(()) => {}
+            Err(error) => match error {
+                ParseError {
+                    token,
+                    previous_span: Some(span),
+                    message,
+                } => report_non_runtime_error(span.union(&token.span), &message),
+                ParseError {
+                    token,
+                    previous_span: None,
+                    message,
+                } => report_token_error(&token, &message),
+            },
+        };
+
+        parser.statements
     }
 
     /// Get the current token.
@@ -159,6 +170,57 @@ impl<'s> Parser<'s> {
 
             self.advance();
         }
+    }
+
+    /// program → statement* EOF ;
+    fn parse_program(&mut self) -> ParseResult<'s, ()> {
+        while !self.is_at_end() {
+            let stmt = self.parse_statement()?;
+            self.statements.push(stmt);
+        }
+        Ok(())
+    }
+
+    /// statement  → exprStmt | printStmt ;
+    fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        if self.match_tokens([TokenType::Print]) {
+            self.parse_print_statement()
+        } else {
+            self.parse_expr_statement()
+        }
+    }
+
+    /// printStmt → "print" expression ";" ;
+    fn parse_print_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        let print_keyword_span = self.previous().unwrap().span;
+        let value = self.parse_expression()?;
+        let semicolon_span = self
+            .consume(
+                TokenType::Semicolon,
+                Some(print_keyword_span),
+                "Expected ';' after value".to_string(),
+            )?
+            .span;
+
+        let span = print_keyword_span.union(&semicolon_span);
+        let value = Stmt::Print(value);
+        Ok(WithSpan { span, value })
+    }
+
+    /// exprStmt → expression ";" ;
+    fn parse_expr_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        let value = self.parse_expression()?;
+        let semicolon_span = self
+            .consume(
+                TokenType::Semicolon,
+                Some(value.span),
+                "Expected ';' after expression".to_string(),
+            )?
+            .span;
+
+        let span = value.span.union(&semicolon_span);
+        let value = Stmt::Expression(value);
+        Ok(WithSpan { span, value })
     }
 
     /// expression → equality ;
