@@ -125,8 +125,8 @@ pub fn report_token_error(token: &Token<'_>, message: &str) {
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
-/// Report an error during the scanning of source code.
-pub fn report_scanning_error(span: Span, message: &str) {
+/// Report an error before runtime.
+pub fn report_non_runtime_error(span: Span, message: &str) {
     print_error_message(Some(span), message);
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
@@ -137,19 +137,8 @@ pub fn report_runtime_error(span: Span, message: &str) {
     HAD_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
-// Report the error with the given details.
-//fn report_error(span: Span, message: &str) {
-
-//let message = if start_line == end_line {
-//format!("{message}\n{:?}", SOURCE_CODE.read().unwrap())
-//} else {
-//format!("[{start_line}:{start_col} to {end_line}:{end_col}]")
-//};
-
-//print_error_message(&message, Some(span));
-//}
-
 /// Print the given error message.
+#[instrument(skip_all)]
 fn print_error_message(span: Option<Span>, message: &str) {
     use crossterm::{
         execute,
@@ -171,25 +160,30 @@ fn print_error_message(span: Option<Span>, message: &str) {
         let line_number_width =
             cmp::max(start_line.to_string().len(), end_line.to_string().len()) + 1;
 
+        debug!(?span);
+        debug!(?start_line, ?start_nl, ?start_col);
+        debug!(?end_line, ?end_nl, ?end_col);
+
+        let mut message = format!(": {message}\n");
+        message.push_str(&format!(
+            "{:width$}{}{}-->{}{} {start_line}:{start_col}\n",
+            "",
+            SetForegroundColor(Color::Blue),
+            Attribute::Bold,
+            ResetColor,
+            Attribute::Reset,
+            width = line_number_width - 1,
+        ));
+        message.push_str(&format!(
+            "{}{}{:line_number_width$}|{}{}\n",
+            SetForegroundColor(Color::Blue),
+            Attribute::Bold,
+            "",
+            ResetColor,
+            Attribute::Reset,
+        ));
+
         if start_line == end_line {
-            let mut message = format!(": {message}\n");
-            message.push_str(&format!(
-                "{:width$}{}{}-->{}{} {start_line}:{start_col}\n",
-                "",
-                SetForegroundColor(Color::Blue),
-                Attribute::Bold,
-                ResetColor,
-                Attribute::Reset,
-                width = line_number_width - 1,
-            ));
-            message.push_str(&format!(
-                "{}{}{:line_number_width$}|{}{}\n",
-                SetForegroundColor(Color::Blue),
-                Attribute::Bold,
-                "",
-                ResetColor,
-                Attribute::Reset,
-            ));
             message.push_str(&format!(
                 "{}{}{start_line}{:width$}|{}{} ",
                 SetForegroundColor(Color::Blue),
@@ -205,7 +199,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                     .unwrap()
                     .lines()
                     .nth(start_line.saturating_sub(1))
-                    .unwrap(),
+                    .unwrap_or(""),
             );
             message.push('\n');
             message.push_str(&format!(
@@ -217,7 +211,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 Attribute::Reset,
             ));
             message.push_str(&format!(
-                "{}{}{:space_width$}{:^<caret_width$}{}{}",
+                "{}{}{:space_width$}^{:-<dash_width$}^{}{}",
                 SetForegroundColor(Color::Red),
                 Attribute::Bold,
                 "",
@@ -225,14 +219,77 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 ResetColor,
                 Attribute::Reset,
                 space_width = start_col.saturating_sub(1),
-                caret_width = end_col - start_col + 1,
+                dash_width = end_col.saturating_sub(start_col).saturating_sub(1),
             ));
-            message.push_str("\n\n");
-
-            message
         } else {
-            todo!()
+            let source_code_text = SOURCE_CODE.read().unwrap();
+
+            for line in start_line..=end_line {
+                let line_text = source_code_text
+                    .lines()
+                    .nth(line.saturating_sub(1))
+                    .unwrap_or("");
+
+                message.push_str(&format!(
+                    "{}{}{line}{:width$}|{}{} ",
+                    SetForegroundColor(Color::Blue),
+                    Attribute::Bold,
+                    "",
+                    ResetColor,
+                    Attribute::Reset,
+                    width = line_number_width - line.to_string().len(),
+                ));
+                message.push_str(line_text);
+                message.push('\n');
+                message.push_str(&format!(
+                    "{}{}{:line_number_width$}|{}{} ",
+                    SetForegroundColor(Color::Blue),
+                    Attribute::Bold,
+                    "",
+                    ResetColor,
+                    Attribute::Reset,
+                ));
+
+                if line == start_line {
+                    message.push_str(&format!(
+                        "{}{}{:space_width$}^{:-<dash_width$}{}{}",
+                        SetForegroundColor(Color::Red),
+                        Attribute::Bold,
+                        "",
+                        "",
+                        ResetColor,
+                        Attribute::Reset,
+                        space_width = start_col.saturating_sub(1),
+                        dash_width = line_text.len().saturating_sub(start_col),
+                    ));
+                } else if line == end_line {
+                    message.push_str(&format!(
+                        "{}{}{:-<dash_width$}^{}{}",
+                        SetForegroundColor(Color::Red),
+                        Attribute::Bold,
+                        "",
+                        ResetColor,
+                        Attribute::Reset,
+                        dash_width = line_text.len().saturating_sub(end_col),
+                    ));
+                } else {
+                    message.push_str(&format!(
+                        "{}{}{:-<dash_width$}{}{}",
+                        SetForegroundColor(Color::Red),
+                        Attribute::Bold,
+                        "",
+                        ResetColor,
+                        Attribute::Reset,
+                        dash_width = line_text.len(),
+                    ));
+                }
+
+                message.push('\n');
+            }
         }
+
+        message.push_str("\n\n");
+        message
     } else {
         format!(": {message}\n")
     };

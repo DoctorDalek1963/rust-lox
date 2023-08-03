@@ -135,7 +135,7 @@ impl<'s> Scanner<'s> {
 
     /// Report the given error message with the current span.
     fn report_error(&self, message: &str) {
-        crate::lox::report_scanning_error(self.current_span(), message);
+        crate::lox::report_non_runtime_error(self.current_span(), message);
     }
 
     /// Return the char pointed to by `self.current`.

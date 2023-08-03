@@ -2,21 +2,24 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
-    lox::report_token_error,
-    span::WithSpan,
+    lox::{report_non_runtime_error, report_token_error},
+    span::{Span, WithSpan},
     tokens::{Token, TokenLiteral, TokenType},
 };
 use std::fmt;
 use thiserror::Error;
 
 /// An error that occured during parsing.
-#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[derive(Clone, Debug, PartialEq, Error)]
 struct ParseError<'s> {
     /// The token that caused the error.
     token: Token<'s>,
 
+    /// The span of related tokens before this error.
+    previous_span: Option<Span>,
+
     /// The message to display to the user.
-    message: &'static str,
+    message: String,
 }
 
 impl fmt::Display for ParseError<'_> {
@@ -54,7 +57,24 @@ impl<'s> Parser<'s> {
     /// Parse the given list of tokens.
     pub fn parse(tokens: Vec<Token<'s>>) -> Option<SpanExpr> {
         let mut parser = Self { tokens, current: 0 };
-        parser.parse_expression().ok()
+        match parser.parse_expression() {
+            Ok(span_expr) => Some(span_expr),
+            Err(error) => {
+                match error {
+                    ParseError {
+                        token,
+                        previous_span: Some(span),
+                        message,
+                    } => report_non_runtime_error(span.union(&token.span), &message),
+                    ParseError {
+                        token,
+                        previous_span: None,
+                        message,
+                    } => report_token_error(&token, &message),
+                };
+                None
+            }
+        }
     }
 
     /// Get the current token.
@@ -106,14 +126,18 @@ impl<'s> Parser<'s> {
     fn consume(
         &mut self,
         token_type: TokenType,
-        message: &'static str,
+        previous_span: Option<Span>,
+        message: String,
     ) -> ParseResult<'s, Token<'s>> {
         if self.check(token_type) {
             Ok(self.advance())
         } else {
             let token = *self.peek().unwrap();
-            crate::lox::report_token_error(&token, message);
-            Err(ParseError { token, message })
+            Err(ParseError {
+                token,
+                previous_span,
+                message,
+            })
         }
     }
 
@@ -346,7 +370,11 @@ impl<'s> Parser<'s> {
                     ..
                 }) => {
                     let expr = self.parse_expression()?;
-                    self.consume(RightParen, "Expect ')' at end of grouped expression")?;
+                    self.consume(
+                        RightParen,
+                        Some(span.union(&expr.span)),
+                        "Expected ')' at end of grouped expression".to_string(),
+                    )?;
                     Expr::Grouping(Box::new(expr))
                 }
                 _ => unreachable!(),
@@ -355,9 +383,12 @@ impl<'s> Parser<'s> {
             Ok(WithSpan { span, value })
         } else {
             let token = *self.peek().unwrap_or(self.previous().unwrap());
-            let message = "Expected primary token";
-            report_token_error(&token, message);
-            Err(ParseError { token, message })
+            let message = format!("Expected primary token, got {:?}", token.token_type);
+            Err(ParseError {
+                token,
+                previous_span: None,
+                message,
+            })
         }
     }
 }
