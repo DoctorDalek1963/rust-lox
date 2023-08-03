@@ -209,17 +209,30 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 ResetColor,
                 Attribute::Reset,
             ));
-            message.push_str(&format!(
-                "{}{}{:space_width$}^{:-<dash_width$}^{}{}",
-                SetForegroundColor(Color::Red),
-                Attribute::Bold,
-                "",
-                "",
-                ResetColor,
-                Attribute::Reset,
-                space_width = start_col.saturating_sub(1),
-                dash_width = end_col.saturating_sub(start_col).saturating_sub(1),
-            ));
+
+            if start_col == end_col {
+                message.push_str(&format!(
+                    "{}{}{:space_width$}^{}{}",
+                    SetForegroundColor(Color::Red),
+                    Attribute::Bold,
+                    "",
+                    ResetColor,
+                    Attribute::Reset,
+                    space_width = start_col.saturating_sub(1),
+                ));
+            } else {
+                message.push_str(&format!(
+                    "{}{}{:space_width$}^{:-<dash_width$}^{}{}",
+                    SetForegroundColor(Color::Red),
+                    Attribute::Bold,
+                    "",
+                    "",
+                    ResetColor,
+                    Attribute::Reset,
+                    space_width = start_col.saturating_sub(1),
+                    dash_width = end_col.saturating_sub(start_col).saturating_sub(1),
+                ));
+            }
         } else {
             let source_code_text = SOURCE_CODE.read().unwrap();
 
