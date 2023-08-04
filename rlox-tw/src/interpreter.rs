@@ -5,7 +5,7 @@ use crate::{
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, mem};
 use thiserror::Error;
 
 /// An error encountered by the interpreter at runtime.
@@ -30,14 +30,24 @@ impl fmt::Display for RuntimeError {
 /// The environment of defined values in the current interpreter session.
 #[derive(Clone, Debug, PartialEq)]
 struct Environment {
+    /// The enclosing environment.
+    enclosing: Option<Box<Environment>>,
+
     /// A map of variable names to their values.
     values: HashMap<String, LoxObject>,
 }
 
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
 impl Environment {
     /// Create a new, empty environment.
-    fn new() -> Self {
+    fn new(enclosing: Option<Box<Self>>) -> Self {
         Self {
+            enclosing,
             values: HashMap::new(),
         }
     }
@@ -53,33 +63,46 @@ impl Environment {
             *current = value;
             Ok(())
         } else {
-            Err(RuntimeError {
-                message: format!("Undefined variable name '{name}'"),
-                span,
-            })
+            if let Some(env) = &mut self.enclosing {
+                env.assign(name, value, span)
+            } else {
+                Err(RuntimeError {
+                    message: format!("Undefined variable name '{name}'"),
+                    span,
+                })
+            }
         }
     }
 
     /// Get the value of the given variable, returning a [`RuntimeError`] if the name is undefined.
     fn get(&self, name: &str, span: Span) -> Result<&LoxObject> {
-        self.values.get(name).ok_or_else(|| RuntimeError {
-            span,
-            message: format!("Undefined variable name '{name}'"),
-        })
+        if let Some(value) = self.values.get(name) {
+            Ok(value)
+        } else {
+            if let Some(env) = &self.enclosing {
+                env.get(name, span)
+            } else {
+                Err(RuntimeError {
+                    span,
+                    message: format!("Undefined variable name '{name}'"),
+                })
+            }
+        }
     }
 }
 
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TwInterpreter {
-    global_environment: Environment,
+    /// The environment of defined values in the current interpreter session.
+    environment: Environment,
 }
 
 impl TwInterpreter {
     /// Create a new tree-walk interpreter.
     pub fn new() -> Self {
         Self {
-            global_environment: Environment::new(),
+            environment: Environment::new(None),
         }
     }
 
@@ -105,16 +128,36 @@ impl TwInterpreter {
                 self.evaluate_expression(expr)?;
             }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
-            Stmt::VarDecl(name, initializer) => {
-                let value = match initializer {
-                    Some(expr) => self.evaluate_expression(expr)?.value,
-                    None => LoxObject::Nil,
-                };
-                self.global_environment.define(name.value.clone(), value);
-            }
+            Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
+            Stmt::Block(stmts) => self.execute_block(stmts)?,
         }
 
         Ok(())
+    }
+
+    /// Execute a variable declaration in the current environment.
+    fn execute_var_decl(
+        &mut self,
+        name: &WithSpan<String>,
+        initializer: &Option<SpanExpr>,
+    ) -> Result<()> {
+        let value = match initializer {
+            Some(expr) => self.evaluate_expression(expr)?.value,
+            None => LoxObject::Nil,
+        };
+        self.environment.define(name.value.clone(), value);
+        Ok(())
+    }
+
+    /// Execute the given block, creating a new environment for it and resetting the environment at
+    /// the end.
+    fn execute_block(&mut self, stmts: &[SpanStmt]) -> Result<()> {
+        let original_env = mem::take(&mut self.environment);
+        self.environment = Environment::new(Some(Box::new(original_env)));
+
+        let result = self.execute_statements(stmts);
+        self.environment = *mem::take(&mut self.environment.enclosing).unwrap();
+        result
     }
 
     /// Evaluate the given expression.
@@ -156,10 +199,10 @@ impl TwInterpreter {
                 span = new_span;
                 value
             }
-            Expr::Variable(name) => self.global_environment.get(name, span)?.clone(),
+            Expr::Variable(name) => self.environment.get(name, span)?.clone(),
             Expr::Assign(name, expr) => {
                 let value = self.evaluate_expression(expr)?.value;
-                self.global_environment.assign(name, value.clone(), span)?;
+                self.environment.assign(name, value.clone(), span)?;
                 value
             }
         };

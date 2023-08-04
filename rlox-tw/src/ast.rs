@@ -110,4 +110,5 @@ pub enum Stmt {
     Expression(SpanExpr),
     Print(SpanExpr),
     VarDecl(WithSpan<String>, Option<SpanExpr>),
+    Block(Vec<SpanStmt>),
 }

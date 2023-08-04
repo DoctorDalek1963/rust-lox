@@ -22,6 +22,7 @@ impl ParenPrinter {
                         String::new()
                     }
                 ),
+                Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
             })
             .intersperse("\n".to_string())
             .collect()
@@ -72,6 +73,7 @@ impl RpnPrinter {
                         String::new()
                     }
                 ),
+                Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
             })
             .intersperse("\n".to_string())
             .collect()

@@ -59,9 +59,10 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 ///
 /// varDecl     → "var" IDENTIFIER ( "=" expression )? ";" ;
 ///
-/// statement   → exprStmt | printStmt ;
+/// statement   → exprStmt | printStmt | block ;
 /// exprStmt    → expression ";" ;
 /// printStmt   → "print" expression ";" ;
+/// block       → "{" declaration* "}" ;
 ///
 /// expression  → assignment ;
 /// assignment  → IDENTIFIER "=" assignment | equality ;
@@ -243,10 +244,15 @@ impl<'s> Parser<'s> {
         Ok(WithSpan { span, value })
     }
 
-    /// statement → exprStmt | printStmt ;
+    /// statement → exprStmt | printStmt | block ;
     fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
         if self.match_tokens([TokenType::Print]) {
             self.parse_print_statement()
+        } else if self.match_tokens([TokenType::LeftBrace]) {
+            self.parse_block().map(|WithSpan { span, value }| WithSpan {
+                span,
+                value: Stmt::Block(value),
+            })
         } else {
             self.parse_expr_statement()
         }
@@ -283,6 +289,34 @@ impl<'s> Parser<'s> {
         let span = value.span.union(&semicolon_span);
         let value = Stmt::Expression(value);
         Ok(WithSpan { span, value })
+    }
+
+    /// block → "{" declaration* "}" ;
+    ///
+    /// This function does not return a [`Stmt::Block`] but just the span of the block including
+    /// braces, and the statements inside the block. It is easily wrapped into a [`Stmt::Block`] by
+    /// [`parse_statement`](Self::parse_statement).
+    fn parse_block(&mut self) -> ParseResult<'s, WithSpan<Vec<SpanStmt>>> {
+        let mut stmts = Vec::new();
+        let mut span = self.previous().unwrap().span;
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            if let Some(stmt) = self.parse_declaration() {
+                span = span.union(&stmt.span);
+                stmts.push(stmt);
+            }
+        }
+
+        let right_brace_span = self
+            .consume(
+                TokenType::RightBrace,
+                Some(span),
+                "Expected '}' after block".to_string(),
+            )?
+            .span;
+        span = span.union(&right_brace_span);
+
+        Ok(WithSpan { span, value: stmts })
     }
 
     /// expression → assignment ;
