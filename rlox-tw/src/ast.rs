@@ -97,6 +97,7 @@ pub enum Expr {
     Number(f64),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
     Variable(String),
+    Assign(String, Box<SpanExpr>),
 }
 
 /// An [`Stmt`] wrapped in [`WithSpan`].

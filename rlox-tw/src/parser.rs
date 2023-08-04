@@ -63,7 +63,8 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 /// exprStmt    → expression ";" ;
 /// printStmt   → "print" expression ";" ;
 ///
-/// expression  → equality ;
+/// expression  → assignment ;
+/// assignment  → IDENTIFIER "=" assignment | equality ;
 /// equality    → comparison ( ( "!=" | "==" ) comparison )* ;
 /// comparison  → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 /// term        → factor ( ( "-" | "+" ) factor )* ;
@@ -284,9 +285,39 @@ impl<'s> Parser<'s> {
         Ok(WithSpan { span, value })
     }
 
-    /// expression → equality ;
+    /// expression → assignment ;
     fn parse_expression(&mut self) -> ParseResult<'s, SpanExpr> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    /// assignment → IDENTIFIER "=" assignment | equality ;
+    fn parse_assignment(&mut self) -> ParseResult<'s, SpanExpr> {
+        let expr = self.parse_equality()?;
+
+        if self.match_tokens([TokenType::Equal]) {
+            let equals = self.previous().unwrap().clone();
+            let r_value = self.parse_assignment()?;
+
+            if let WithSpan {
+                span: _,
+                value: Expr::Variable(name),
+            } = expr
+            {
+                return Ok(WithSpan {
+                    span: expr.span.union(&r_value.span),
+                    value: Expr::Assign(name, Box::new(r_value)),
+                });
+            } else {
+                ParseError {
+                    token: equals,
+                    previous_span: Some(expr.span),
+                    message: "Invalid assignment target".to_string(),
+                }
+                .report();
+            }
+        }
+
+        Ok(expr)
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;

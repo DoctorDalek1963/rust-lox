@@ -42,9 +42,22 @@ impl Environment {
         }
     }
 
-    /// Assign a value to a variable name. Also declares a variable if it's new.
-    fn assign(&mut self, name: String, value: LoxObject) {
+    /// Define a new variable with the given value.
+    fn define(&mut self, name: String, value: LoxObject) {
         self.values.insert(name, value);
+    }
+
+    /// Re-assign an already existing variable. Returns a [`RuntimeError`] if the name is undefined.
+    fn assign(&mut self, name: &str, value: LoxObject, span: Span) -> Result<()> {
+        if let Some(current) = self.values.get_mut(name) {
+            *current = value;
+            Ok(())
+        } else {
+            Err(RuntimeError {
+                message: format!("Undefined variable name '{name}'"),
+                span,
+            })
+        }
     }
 
     /// Get the value of the given variable, returning a [`RuntimeError`] if the name is undefined.
@@ -97,7 +110,7 @@ impl TwInterpreter {
                     Some(expr) => self.evaluate_expression(expr)?.value,
                     None => LoxObject::Nil,
                 };
-                self.global_environment.assign(name.value.clone(), value);
+                self.global_environment.define(name.value.clone(), value);
             }
         }
 
@@ -144,6 +157,11 @@ impl TwInterpreter {
                 value
             }
             Expr::Variable(name) => self.global_environment.get(name, span)?.clone(),
+            Expr::Assign(name, expr) => {
+                let value = self.evaluate_expression(expr)?.value;
+                self.global_environment.assign(name, value.clone(), span)?;
+                value
+            }
         };
 
         Ok(WithSpan { span, value })

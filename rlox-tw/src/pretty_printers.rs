@@ -47,6 +47,7 @@ impl ParenPrinter {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
             Expr::Variable(name) => name.to_string(),
+            Expr::Assign(name, expr) => format!("{name} = {}", Self::print_expr(expr)),
         }
     }
 }
@@ -94,6 +95,7 @@ impl RpnPrinter {
             Expr::Number(number) => number.to_string(),
             Expr::Unary(operator, expr) => format!("{} {}", Self::print_expr(expr), operator.value),
             Expr::Variable(name) => name.to_string(),
+            Expr::Assign(name, expr) => format!("{name} {} =", Self::print_expr(expr)),
         }
     }
 }
