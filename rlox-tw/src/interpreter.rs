@@ -5,7 +5,7 @@ use crate::{
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::fmt;
+use std::{collections::HashMap, fmt};
 use thiserror::Error;
 
 /// An error encountered by the interpreter at runtime.
@@ -27,14 +27,47 @@ impl fmt::Display for RuntimeError {
     }
 }
 
+/// The environment of defined values in the current interpreter session.
+#[derive(Clone, Debug, PartialEq)]
+struct Environment {
+    /// A map of variable names to their values.
+    values: HashMap<String, LoxObject>,
+}
+
+impl Environment {
+    /// Create a new, empty environment.
+    fn new() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
+
+    /// Assign a value to a variable name. Also declares a variable if it's new.
+    fn assign(&mut self, name: String, value: LoxObject) {
+        self.values.insert(name, value);
+    }
+
+    /// Get the value of the given variable, returning a [`RuntimeError`] if the name is undefined.
+    fn get(&self, name: &str, span: Span) -> Result<&LoxObject> {
+        self.values.get(name).ok_or_else(|| RuntimeError {
+            span,
+            message: format!("Undefined variable name '{name}'"),
+        })
+    }
+}
+
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
-pub struct TwInterpreter {}
+pub struct TwInterpreter {
+    global_environment: Environment,
+}
 
 impl TwInterpreter {
     /// Create a new tree-walk interpreter.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            global_environment: Environment::new(),
+        }
     }
 
     /// Interpret the given AST, reporting a runtime error if one occurs.
@@ -59,6 +92,13 @@ impl TwInterpreter {
                 self.evaluate_expression(expr)?;
             }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
+            Stmt::VarDecl(name, initializer) => {
+                let value = match initializer {
+                    Some(expr) => self.evaluate_expression(expr)?.value,
+                    None => LoxObject::Nil,
+                };
+                self.global_environment.assign(name.value.clone(), value);
+            }
         }
 
         Ok(())
@@ -103,6 +143,7 @@ impl TwInterpreter {
                 span = new_span;
                 value
             }
+            Expr::Variable(name) => self.global_environment.get(name, span)?.clone(),
         };
 
         Ok(WithSpan { span, value })

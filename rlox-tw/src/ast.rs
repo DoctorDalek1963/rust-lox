@@ -96,6 +96,7 @@ pub enum Expr {
     String(String),
     Number(f64),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
+    Variable(String),
 }
 
 /// An [`Stmt`] wrapped in [`WithSpan`].
@@ -107,4 +108,5 @@ pub type SpanStmt = WithSpan<Stmt>;
 pub enum Stmt {
     Expression(SpanExpr),
     Print(SpanExpr),
+    VarDecl(WithSpan<String>, Option<SpanExpr>),
 }

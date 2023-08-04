@@ -28,6 +28,24 @@ impl fmt::Display for ParseError<'_> {
     }
 }
 
+impl ParseError<'_> {
+    /// Report the parsing error to the user.
+    fn report(&self) {
+        match self {
+            Self {
+                token,
+                previous_span: Some(span),
+                message,
+            } => report_non_runtime_error(span.union(&token.span), &message),
+            Self {
+                token,
+                previous_span: None,
+                message,
+            } => report_token_error(&token, &message),
+        }
+    }
+}
+
 /// A result wrapping a [`ParseError`].
 type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 
@@ -35,19 +53,23 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 ///
 /// It parses this grammar:
 /// ```text
-/// program    → statement* EOF ;
+/// program     → declaration* EOF ;
 ///
-/// statement  → exprStmt | printStmt ;
-/// exprStmt   → expression ";" ;
-/// printStmt  → "print" expression ";" ;
+/// declaration → varDecl | statement ;
 ///
-/// expression → equality ;
-/// equality   → comparison ( ( "!=" | "==" ) comparison )* ;
-/// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-/// term       → factor ( ( "-" | "+" ) factor )* ;
-/// factor     → unary ( ( "/" | "*" ) unary )* ;
-/// unary      → ( "!" | "-" ) unary | primary ;
-/// primary    → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+/// varDecl     → "var" IDENTIFIER ( "=" expression )? ";" ;
+///
+/// statement   → exprStmt | printStmt ;
+/// exprStmt    → expression ";" ;
+/// printStmt   → "print" expression ";" ;
+///
+/// expression  → equality ;
+/// equality    → comparison ( ( "!=" | "==" ) comparison )* ;
+/// comparison  → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+/// term        → factor ( ( "-" | "+" ) factor )* ;
+/// factor      → unary ( ( "/" | "*" ) unary )* ;
+/// unary       → ( "!" | "-" ) unary | primary ;
+/// primary     → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 /// ```
 pub struct Parser<'s> {
     /// The token list that we're parsing.
@@ -69,22 +91,7 @@ impl<'s> Parser<'s> {
             statements: vec![],
         };
 
-        match parser.parse_program() {
-            Ok(()) => {}
-            Err(error) => match error {
-                ParseError {
-                    token,
-                    previous_span: Some(span),
-                    message,
-                } => report_non_runtime_error(span.union(&token.span), &message),
-                ParseError {
-                    token,
-                    previous_span: None,
-                    message,
-                } => report_token_error(&token, &message),
-            },
-        };
-
+        parser.parse_program();
         parser.statements
     }
 
@@ -172,16 +179,70 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// program → statement* EOF ;
-    fn parse_program(&mut self) -> ParseResult<'s, ()> {
+    /// program → declaration* EOF ;
+    fn parse_program(&mut self) {
         while !self.is_at_end() {
-            let stmt = self.parse_statement()?;
-            self.statements.push(stmt);
+            if let Some(stmt) = self.parse_declaration() {
+                self.statements.push(stmt);
+            }
         }
-        Ok(())
     }
 
-    /// statement  → exprStmt | printStmt ;
+    /// declaration → varDecl | statement ;
+    fn parse_declaration(&mut self) -> Option<SpanStmt> {
+        let result = if self.match_tokens([TokenType::Var]) {
+            self.parse_var_decl()
+        } else {
+            self.parse_statement()
+        };
+
+        match result {
+            Ok(stmt) => Some(stmt),
+            Err(error) => {
+                error.report();
+                self.synchronize();
+                None
+            }
+        }
+    }
+
+    /// varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    fn parse_var_decl(&mut self) -> ParseResult<'s, SpanStmt> {
+        let var_keyword_span = self.previous().unwrap().span;
+        let name = self.consume(
+            TokenType::Identifier,
+            Some(var_keyword_span),
+            "Expected variable name after 'var' keyword".to_string(),
+        )?;
+
+        let expr = if self.match_tokens([TokenType::Equal]) {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+
+        let span = match expr {
+            Some(WithSpan { span, value: _ }) => var_keyword_span.union(&span),
+            _ => var_keyword_span,
+        };
+
+        self.consume(
+            TokenType::Semicolon,
+            Some(span),
+            "Expected ';' after variable declaration".to_string(),
+        )?;
+
+        let value = Stmt::VarDecl(
+            WithSpan {
+                span: name.span,
+                value: name.lexeme.to_string(),
+            },
+            expr,
+        );
+        Ok(WithSpan { span, value })
+    }
+
+    /// statement → exprStmt | printStmt ;
     fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
         if self.match_tokens([TokenType::Print]) {
             self.parse_print_statement()
@@ -400,7 +461,7 @@ impl<'s> Parser<'s> {
     fn parse_primary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
-        if self.match_tokens([True, False, Nil, Number, String, LeftParen]) {
+        if self.match_tokens([True, False, Nil, Number, String, Identifier, LeftParen]) {
             let previous = self.previous();
 
             let span = match previous {
@@ -427,6 +488,11 @@ impl<'s> Parser<'s> {
                     literal: Some(TokenLiteral::String(string)),
                     ..
                 }) => Expr::String(string.to_string()),
+                Some(Token {
+                    token_type: Identifier,
+                    lexeme,
+                    ..
+                }) => Expr::Variable(lexeme.to_string()),
                 Some(Token {
                     token_type: LeftParen,
                     ..

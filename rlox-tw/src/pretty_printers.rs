@@ -13,6 +13,15 @@ impl ParenPrinter {
             .map(|stmt| match &stmt.value {
                 Stmt::Expression(expr) => format!("{};", Self::print_expr(expr)),
                 Stmt::Print(expr) => format!("print {};", Self::print_expr(expr)),
+                Stmt::VarDecl(name, initializer) => format!(
+                    "var {}{};",
+                    name.value,
+                    if let Some(expr) = initializer {
+                        format!(" = {}", Self::print_expr(&expr))
+                    } else {
+                        String::new()
+                    }
+                ),
             })
             .intersperse("\n".to_string())
             .collect()
@@ -37,6 +46,7 @@ impl ParenPrinter {
             Expr::Unary(operator, expr) => {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
+            Expr::Variable(name) => name.to_string(),
         }
     }
 }
@@ -52,6 +62,15 @@ impl RpnPrinter {
             .map(|stmt| match &stmt.value {
                 Stmt::Expression(expr) => format!("{} ;", Self::print_expr(expr)),
                 Stmt::Print(expr) => format!("{} print ;", Self::print_expr(expr)),
+                Stmt::VarDecl(name, initializer) => format!(
+                    "{} var{} ;",
+                    name.value,
+                    if let Some(expr) = initializer {
+                        format!(" {} =", Self::print_expr(&expr))
+                    } else {
+                        String::new()
+                    }
+                ),
             })
             .intersperse("\n".to_string())
             .collect()
@@ -74,6 +93,7 @@ impl RpnPrinter {
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
             Expr::Unary(operator, expr) => format!("{} {}", Self::print_expr(expr), operator.value),
+            Expr::Variable(name) => name.to_string(),
         }
     }
 }
