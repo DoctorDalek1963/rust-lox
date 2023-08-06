@@ -10,22 +10,43 @@ impl ParenPrinter {
     pub fn print_stmts(stmts: &[SpanStmt]) -> String {
         stmts
             .iter()
-            .map(|stmt| match &stmt.value {
-                Stmt::Expression(expr) => format!("{};", Self::print_expr(expr)),
-                Stmt::Print(expr) => format!("print {};", Self::print_expr(expr)),
-                Stmt::VarDecl(name, initializer) => format!(
-                    "var {}{};",
-                    name.value,
-                    if let Some(expr) = initializer {
-                        format!(" = {}", Self::print_expr(&expr))
-                    } else {
-                        String::new()
-                    }
-                ),
-                Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
-            })
+            .map(|stmt| Self::print_stmt(stmt))
             .intersperse("\n".to_string())
             .collect()
+    }
+
+    /// Print a single statement.
+    fn print_stmt(stmt: &SpanStmt) -> String {
+        match &stmt.value {
+            Stmt::VarDecl(name, initializer) => format!(
+                "var {}{};",
+                name.value,
+                if let Some(expr) = initializer {
+                    format!(" = {}", Self::print_expr(&expr))
+                } else {
+                    String::new()
+                }
+            ),
+            Stmt::Expression(expr) => format!("{};", Self::print_expr(expr)),
+            Stmt::If(condition, then_branch, else_branch) => {
+                if let Some(else_branch) = else_branch {
+                    format!(
+                        "if ({}) {{ {} }} else {{ {} }}",
+                        Self::print_expr(condition),
+                        Self::print_stmt(then_branch),
+                        Self::print_stmt(else_branch)
+                    )
+                } else {
+                    format!(
+                        "if ({}) {{ {} }}",
+                        Self::print_expr(condition),
+                        Self::print_stmt(then_branch)
+                    )
+                }
+            }
+            Stmt::Print(expr) => format!("print {};", Self::print_expr(expr)),
+            Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
+        }
     }
 
     /// Print a version of the given expression with extra parentheses.
@@ -61,22 +82,43 @@ impl RpnPrinter {
     pub fn print_stmts(stmts: &[SpanStmt]) -> String {
         stmts
             .iter()
-            .map(|stmt| match &stmt.value {
-                Stmt::Expression(expr) => format!("{} ;", Self::print_expr(expr)),
-                Stmt::Print(expr) => format!("{} print ;", Self::print_expr(expr)),
-                Stmt::VarDecl(name, initializer) => format!(
-                    "{} var{} ;",
-                    name.value,
-                    if let Some(expr) = initializer {
-                        format!(" {} =", Self::print_expr(&expr))
-                    } else {
-                        String::new()
-                    }
-                ),
-                Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
-            })
+            .map(|stmt| Self::print_stmt(stmt))
             .intersperse("\n".to_string())
             .collect()
+    }
+
+    /// Print a single statement.
+    fn print_stmt(stmt: &SpanStmt) -> String {
+        match &stmt.value {
+            Stmt::VarDecl(name, initializer) => format!(
+                "{} var{} ;",
+                name.value,
+                if let Some(expr) = initializer {
+                    format!(" {} =", Self::print_expr(&expr))
+                } else {
+                    String::new()
+                }
+            ),
+            Stmt::Expression(expr) => format!("{} ;", Self::print_expr(expr)),
+            Stmt::If(condition, then_branch, else_branch) => {
+                if let Some(else_branch) = else_branch {
+                    format!(
+                        "if ({}) {{ {} }} else {{ {} }}",
+                        Self::print_expr(condition),
+                        Self::print_stmt(then_branch),
+                        Self::print_stmt(else_branch)
+                    )
+                } else {
+                    format!(
+                        "if ({}) {{ {} }}",
+                        Self::print_expr(condition),
+                        Self::print_stmt(then_branch)
+                    )
+                }
+            }
+            Stmt::Print(expr) => format!("{} print ;", Self::print_expr(expr)),
+            Stmt::Block(stmts) => format!("{{\n{}\n}}", Self::print_stmts(stmts)),
+        }
     }
 
     /// Print the RPN version of the given expression.

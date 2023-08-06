@@ -107,8 +107,9 @@ pub type SpanStmt = WithSpan<Stmt>;
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::missing_docs_in_private_items)]
 pub enum Stmt {
-    Expression(SpanExpr),
-    Print(SpanExpr),
     VarDecl(WithSpan<String>, Option<SpanExpr>),
+    Expression(SpanExpr),
+    If(SpanExpr, Box<SpanStmt>, Option<Box<SpanStmt>>),
+    Print(SpanExpr),
     Block(Vec<SpanStmt>),
 }

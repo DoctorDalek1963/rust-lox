@@ -59,8 +59,9 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 ///
 /// varDecl     → "var" IDENTIFIER ( "=" expression )? ";" ;
 ///
-/// statement   → exprStmt | printStmt | block ;
+/// statement   → exprStmt | ifStmt | printStmt | block ;
 /// exprStmt    → expression ";" ;
+/// ifStmt      → "if" "(" expression ")" statement ( "else" statement )? ;
 /// printStmt   → "print" expression ";" ;
 /// block       → "{" declaration* "}" ;
 ///
@@ -244,9 +245,11 @@ impl<'s> Parser<'s> {
         Ok(WithSpan { span, value })
     }
 
-    /// statement → exprStmt | printStmt | block ;
+    /// statement → exprStmt | ifStmt | printStmt | block ;
     fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
-        if self.match_tokens([TokenType::Print]) {
+        if self.match_tokens([TokenType::If]) {
+            self.parse_if_statement()
+        } else if self.match_tokens([TokenType::Print]) {
             self.parse_print_statement()
         } else if self.match_tokens([TokenType::LeftBrace]) {
             self.parse_block().map(|WithSpan { span, value }| WithSpan {
@@ -256,6 +259,68 @@ impl<'s> Parser<'s> {
         } else {
             self.parse_expr_statement()
         }
+    }
+
+    /// exprStmt → expression ";" ;
+    fn parse_expr_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        let value = self.parse_expression()?;
+        let semicolon_span = self
+            .consume(
+                TokenType::Semicolon,
+                Some(value.span),
+                "Expected ';' after expression".to_string(),
+            )?
+            .span;
+
+        let span = value.span.union(&semicolon_span);
+        let value = Stmt::Expression(value);
+        Ok(WithSpan { span, value })
+    }
+
+    /// ifStmt → "if" "(" expression ")" statement ( "else" statement )? ;
+    fn parse_if_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        let mut full_span = self.previous().unwrap().span;
+
+        let left_paren_span = self
+            .consume(
+                TokenType::LeftParen,
+                Some(full_span),
+                "Expected '(' after 'if'".to_string(),
+            )?
+            .span;
+        full_span = full_span.union(&left_paren_span);
+
+        let condition = self.parse_expression()?;
+        full_span = full_span.union(&condition.span);
+
+        let right_paren_span = self
+            .consume(
+                TokenType::RightParen,
+                Some(full_span),
+                "Expected ')' after if condition".to_string(),
+            )?
+            .span;
+        full_span = full_span.union(&right_paren_span);
+
+        let then_branch = self.parse_statement()?;
+        full_span = full_span.union(&then_branch.span);
+
+        let else_branch = if self.match_tokens([TokenType::Else]) {
+            let stmt = self.parse_statement()?;
+            full_span = full_span.union(&stmt.span);
+            Some(stmt)
+        } else {
+            None
+        };
+
+        Ok(WithSpan {
+            span: full_span,
+            value: Stmt::If(
+                condition,
+                Box::new(then_branch),
+                else_branch.map(|stmt| Box::new(stmt)),
+            ),
+        })
     }
 
     /// printStmt → "print" expression ";" ;
@@ -272,22 +337,6 @@ impl<'s> Parser<'s> {
 
         let span = print_keyword_span.union(&semicolon_span);
         let value = Stmt::Print(value);
-        Ok(WithSpan { span, value })
-    }
-
-    /// exprStmt → expression ";" ;
-    fn parse_expr_statement(&mut self) -> ParseResult<'s, SpanStmt> {
-        let value = self.parse_expression()?;
-        let semicolon_span = self
-            .consume(
-                TokenType::Semicolon,
-                Some(value.span),
-                "Expected ';' after expression".to_string(),
-            )?
-            .span;
-
-        let span = value.span.union(&semicolon_span);
-        let value = Stmt::Expression(value);
         Ok(WithSpan { span, value })
     }
 

@@ -124,11 +124,14 @@ impl TwInterpreter {
     /// Execute the given statement.
     fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
         match &stmt.value {
+            Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
             Stmt::Expression(expr) => {
                 self.evaluate_expression(expr)?;
             }
+            Stmt::If(condition, then_branch, else_branch) => {
+                self.execute_if_statement(condition, then_branch, else_branch)?
+            }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
-            Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
             Stmt::Block(stmts) => self.execute_block(stmts)?,
         }
 
@@ -146,6 +149,22 @@ impl TwInterpreter {
             None => LoxObject::Nil,
         };
         self.environment.define(name.value.clone(), value);
+        Ok(())
+    }
+
+    /// Execute an `if` statement.
+    fn execute_if_statement(
+        &mut self,
+        condition: &SpanExpr,
+        then_branch: &Box<SpanStmt>,
+        else_branch: &Option<Box<SpanStmt>>,
+    ) -> Result<()> {
+        if self.evaluate_expression(condition)?.is_truthy() {
+            self.execute_statement(&then_branch)?;
+        } else if let Some(else_branch) = else_branch {
+            self.execute_statement(&else_branch)?;
+        }
+
         Ok(())
     }
 
