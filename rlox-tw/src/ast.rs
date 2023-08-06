@@ -95,6 +95,7 @@ pub enum Expr {
     Grouping(Box<SpanExpr>),
     String(String),
     Number(f64),
+    Logical(Box<SpanExpr>, WithSpan<LogicalOperator>, Box<SpanExpr>),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
     Variable(String),
     Assign(String, Box<SpanExpr>),

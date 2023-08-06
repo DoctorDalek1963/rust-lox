@@ -2,7 +2,7 @@
 
 use super::{ParseError, ParseResult, Parser};
 use crate::{
-    ast::{BinaryOperator, Expr, SpanExpr, UnaryOperator},
+    ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, UnaryOperator},
     span::WithSpan,
     tokens::{Token, TokenLiteral, TokenType},
 };
@@ -13,9 +13,9 @@ impl<'s> Parser<'s> {
         self.parse_assignment()
     }
 
-    /// assignment → IDENTIFIER "=" assignment | equality ;
+    /// assignment → IDENTIFIER "=" assignment | logic_or ;
     fn parse_assignment(&mut self) -> ParseResult<'s, SpanExpr> {
-        let expr = self.parse_equality()?;
+        let expr = self.parse_logic_or()?;
 
         if self.match_tokens([TokenType::Equal]) {
             let equals = self.previous().unwrap().clone();
@@ -38,6 +38,46 @@ impl<'s> Parser<'s> {
                 }
                 .report();
             }
+        }
+
+        Ok(expr)
+    }
+
+    /// logic_or → logic_and ( "or" logic_and )* ;
+    fn parse_logic_or(&mut self) -> ParseResult<'s, SpanExpr> {
+        let mut expr = self.parse_logic_and()?;
+
+        while self.match_tokens([TokenType::Or]) {
+            let operator = WithSpan {
+                span: self.previous().unwrap().span,
+                value: LogicalOperator::Or,
+            };
+
+            let right = self.parse_logic_and()?;
+
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Logical(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
+        }
+
+        Ok(expr)
+    }
+
+    /// logic_and → equality ( "and" equality )* ;
+    fn parse_logic_and(&mut self) -> ParseResult<'s, SpanExpr> {
+        let mut expr = self.parse_equality()?;
+
+        while self.match_tokens([TokenType::And]) {
+            let operator = WithSpan {
+                span: self.previous().unwrap().span,
+                value: LogicalOperator::And,
+            };
+
+            let right = self.parse_equality()?;
+
+            let span = expr.span.union(&operator.span).union(&right.span);
+            let value = Expr::Logical(Box::new(expr), operator, Box::new(right));
+            expr = WithSpan { span, value };
         }
 
         Ok(expr)
@@ -218,7 +258,7 @@ impl<'s> Parser<'s> {
         if self.match_tokens([True, False, Nil, Number, String, Identifier, LeftParen]) {
             let previous = self.previous();
 
-            let span = match previous {
+            let mut span = match previous {
                 Some(Token { span, .. }) => *span,
                 _ => unreachable!(),
             };
@@ -252,11 +292,14 @@ impl<'s> Parser<'s> {
                     ..
                 }) => {
                     let expr = self.parse_expression()?;
-                    self.consume(
-                        RightParen,
-                        Some(span.union(&expr.span)),
-                        "Expected ')' at end of grouped expression".to_string(),
-                    )?;
+                    let right_paren_span = self
+                        .consume(
+                            RightParen,
+                            Some(span.union(&expr.span)),
+                            "Expected ')' at end of grouped expression".to_string(),
+                        )?
+                        .span;
+                    span = span.union(&right_paren_span);
                     Expr::Grouping(Box::new(expr))
                 }
                 _ => unreachable!(),

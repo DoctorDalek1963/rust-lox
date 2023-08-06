@@ -65,6 +65,12 @@ impl ParenPrinter {
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
+            Expr::Logical(left, operator, right) => format!(
+                "{} {} {}",
+                Self::print_expr(left),
+                operator.value,
+                Self::print_expr(right)
+            ),
             Expr::Unary(operator, expr) => {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
@@ -137,6 +143,12 @@ impl RpnPrinter {
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
+            Expr::Logical(left, operator, right) => format!(
+                "({}) ({}) {}",
+                Self::print_expr(left),
+                Self::print_expr(right),
+                operator.value
+            ),
             Expr::Unary(operator, expr) => format!("{} {}", Self::print_expr(expr), operator.value),
             Expr::Variable(name) => name.to_string(),
             Expr::Assign(name, expr) => format!("{name} {} =", Self::print_expr(expr)),

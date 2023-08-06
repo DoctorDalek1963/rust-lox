@@ -1,7 +1,7 @@
 //! This module provides [`TwInterpreter`].
 
 use crate::{
-    ast::{BinaryOperator, Expr, SpanExpr, SpanStmt, Stmt, UnaryOperator},
+    ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
@@ -181,52 +181,72 @@ impl TwInterpreter {
 
     /// Evaluate the given expression.
     fn evaluate_expression(&mut self, expr: &SpanExpr) -> Result<SpanObject> {
-        let WithSpan {
-            mut span,
-            value: expr,
-        } = expr;
+        let WithSpan { span, value: expr } = expr;
+        let span = *span;
 
-        let value = match expr {
-            Expr::Nil => LoxObject::Nil,
-            Expr::Boolean(b) => LoxObject::Boolean(*b),
+        Ok(match expr {
+            Expr::Nil => WithSpan {
+                span,
+                value: LoxObject::Nil,
+            },
+            Expr::Boolean(b) => WithSpan {
+                span,
+                value: LoxObject::Boolean(*b),
+            },
             Expr::Binary(left, operator, right) => {
                 let left = self.evaluate_expression(left)?;
                 let right = self.evaluate_expression(right)?;
-                let WithSpan {
-                    span: new_span,
-                    value,
-                } = self.evaluate_binary_expression(*operator, left, right)?;
-                span = new_span;
-                value
+                self.evaluate_binary_expression(*operator, left, right)?
             }
             Expr::Grouping(expr) => {
-                let WithSpan {
-                    span: new_span,
-                    value,
-                } = self.evaluate_expression(expr)?;
-                span = new_span;
-                value
+                let value = self.evaluate_expression(expr)?.value;
+                WithSpan { span, value }
             }
-            Expr::String(string) => LoxObject::String(string.clone()),
-            Expr::Number(number) => LoxObject::Number(*number),
+            Expr::String(string) => WithSpan {
+                span,
+                value: LoxObject::String(string.clone()),
+            },
+            Expr::Number(number) => WithSpan {
+                span,
+                value: LoxObject::Number(*number),
+            },
+            Expr::Logical(left, operator, right) => {
+                self.evaluate_logical_expression(left, operator, right)?
+            }
             Expr::Unary(operator, expr) => {
                 let value = self.evaluate_expression(expr)?;
-                let WithSpan {
-                    span: new_span,
-                    value,
-                } = self.evaluate_unary_expression(*operator, value)?;
-                span = new_span;
-                value
+                self.evaluate_unary_expression(*operator, value)?
             }
-            Expr::Variable(name) => self.environment.get(name, span)?.clone(),
+            Expr::Variable(name) => WithSpan {
+                span,
+                value: self.environment.get(name, span)?.clone(),
+            },
             Expr::Assign(name, expr) => {
-                let value = self.evaluate_expression(expr)?.value;
-                self.environment.assign(name, value.clone(), span)?;
+                let value = self.evaluate_expression(expr)?;
+                self.environment.assign(name, value.value.clone(), span)?;
                 value
             }
-        };
+        })
+    }
 
-        Ok(WithSpan { span, value })
+    /// Evaluate a logical expression by short-circuiting.
+    fn evaluate_logical_expression(
+        &mut self,
+        left: &SpanExpr,
+        operator: &WithSpan<LogicalOperator>,
+        right: &SpanExpr,
+    ) -> Result<SpanObject> {
+        let span = left.span.union(&right.span);
+        let left = self.evaluate_expression(left)?;
+
+        match operator.value {
+            LogicalOperator::Or if left.value.is_truthy() => Ok(WithSpan { span, ..left }),
+            LogicalOperator::And if !left.value.is_truthy() => Ok(WithSpan { span, ..left }),
+            _ => {
+                let right = self.evaluate_expression(right)?;
+                Ok(WithSpan { span, ..right })
+            }
+        }
     }
 
     /// Evaluate a binary expression.
