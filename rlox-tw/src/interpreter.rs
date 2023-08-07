@@ -132,6 +132,7 @@ impl TwInterpreter {
                 self.execute_if_statement(condition, then_branch, else_branch)?
             }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
+            Stmt::While(condition, body) => self.execute_while_loop(condition, body)?,
             Stmt::Block(stmts) => self.execute_block(stmts)?,
         }
 
@@ -163,6 +164,15 @@ impl TwInterpreter {
             self.execute_statement(&then_branch)?;
         } else if let Some(else_branch) = else_branch {
             self.execute_statement(&else_branch)?;
+        }
+
+        Ok(())
+    }
+
+    /// Execute a while loop.
+    fn execute_while_loop(&mut self, condition: &SpanExpr, body: &Box<SpanStmt>) -> Result<()> {
+        while self.evaluate_expression(condition)?.is_truthy() {
+            self.execute_statement(body)?;
         }
 
         Ok(())

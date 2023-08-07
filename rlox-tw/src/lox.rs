@@ -3,7 +3,7 @@
 use crate::{
     interpreter::TwInterpreter,
     parser::Parser,
-    pretty_printers::{ParenPrinter, RpnPrinter},
+    pretty_printers::ParenPrinter,
     scanner::Scanner,
     span::{LineOffsets, Span},
     tokens::{Token, TokenType},
@@ -125,7 +125,6 @@ impl LoxInterpreter {
 
         debug!(?stmts);
         debug!(parens = %ParenPrinter::print_stmts(&stmts));
-        debug!(rpn = %RpnPrinter::print_stmts(&stmts));
 
         self.interpreter.interpret(&stmts);
     }

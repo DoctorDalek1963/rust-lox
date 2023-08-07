@@ -62,12 +62,14 @@ impl<'s> Parser<'s> {
         Ok(WithSpan { span, value })
     }
 
-    /// statement → exprStmt | ifStmt | printStmt | block ;
+    /// statement → exprStmt | ifStmt | printStmt | whileStmt | block ;
     fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
         if self.match_tokens([TokenType::If]) {
             self.parse_if_statement()
         } else if self.match_tokens([TokenType::Print]) {
             self.parse_print_statement()
+        } else if self.match_tokens([TokenType::While]) {
+            self.parse_while_loop()
         } else if self.match_tokens([TokenType::LeftBrace]) {
             self.parse_block().map(|WithSpan { span, value }| WithSpan {
                 span,
@@ -155,6 +157,40 @@ impl<'s> Parser<'s> {
         let span = print_keyword_span.union(&semicolon_span);
         let value = Stmt::Print(value);
         Ok(WithSpan { span, value })
+    }
+
+    /// whileStmt → "while" "(" expression ")" statement ;
+    fn parse_while_loop(&mut self) -> ParseResult<'s, SpanStmt> {
+        let mut span = self.previous().unwrap().span;
+
+        let left_paren_span = self
+            .consume(
+                TokenType::LeftParen,
+                Some(span),
+                "Expected '(' after 'while'".to_string(),
+            )?
+            .span;
+        span = span.union(&left_paren_span);
+
+        let condition = self.parse_expression()?;
+        span = span.union(&condition.span);
+
+        let right_paren_span = self
+            .consume(
+                TokenType::RightParen,
+                Some(span),
+                "Expected ')' after while condition".to_string(),
+            )?
+            .span;
+        span = span.union(&right_paren_span);
+
+        let stmt = self.parse_statement()?;
+        span = span.union(&stmt.span);
+
+        Ok(WithSpan {
+            span,
+            value: Stmt::While(condition, Box::new(stmt)),
+        })
     }
 
     /// block → "{" declaration* "}" ;
