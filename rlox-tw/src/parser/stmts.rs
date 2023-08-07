@@ -2,8 +2,8 @@
 
 use super::{ParseResult, Parser};
 use crate::{
-    ast::{SpanStmt, Stmt},
-    span::WithSpan,
+    ast::{Expr, SpanStmt, Stmt},
+    span::{Span, WithSpan},
     tokens::TokenType,
 };
 
@@ -70,6 +70,8 @@ impl<'s> Parser<'s> {
             self.parse_print_statement()
         } else if self.match_tokens([TokenType::While]) {
             self.parse_while_loop()
+        } else if self.match_tokens([TokenType::For]) {
+            self.parse_for_loop()
         } else if self.match_tokens([TokenType::LeftBrace]) {
             self.parse_block().map(|WithSpan { span, value }| WithSpan {
                 span,
@@ -191,6 +193,92 @@ impl<'s> Parser<'s> {
             span,
             value: Stmt::While(condition, Box::new(stmt)),
         })
+    }
+
+    /// forStmt → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
+    ///
+    /// This method desugars the for loop to a [while loop](Stmt::While) automatically.
+    fn parse_for_loop(&mut self) -> ParseResult<'s, SpanStmt> {
+        let mut span = self.previous().unwrap().span;
+
+        self.consume(
+            TokenType::LeftParen,
+            Some(span),
+            "Expected '(' after 'for'".to_string(),
+        )?;
+
+        let initializer: Option<SpanStmt> = if self.match_tokens([TokenType::Semicolon]) {
+            None
+        } else if self.match_tokens([TokenType::Var]) {
+            Some(self.parse_var_decl()?)
+        } else {
+            Some(self.parse_expr_statement()?)
+        };
+        if let Some(init) = &initializer {
+            span = span.union(&init.span);
+        }
+
+        let (condition, cond_span) = if !self.check(TokenType::Semicolon) {
+            let expr = self.parse_expression()?;
+            let expr_span = expr.span;
+            span = span.union(&expr.span);
+            (Some(expr), expr_span)
+        } else {
+            let end = self.previous().unwrap().span.end;
+            (None, Span { start: end, end })
+        };
+        self.consume(
+            TokenType::Semicolon,
+            Some(span),
+            "Expected ';' after for loop condition".to_string(),
+        )?;
+
+        let increment = if !self.check(TokenType::Semicolon) {
+            let expr = self.parse_expression()?;
+            span = span.union(&expr.span);
+            Some(expr)
+        } else {
+            None
+        };
+        self.consume(
+            TokenType::RightParen,
+            Some(span),
+            "Expected ')' after for loop clauses".to_string(),
+        )?;
+
+        let mut body = self.parse_statement()?;
+        span = span.union(&body.span);
+
+        if let Some(increment) = increment {
+            let increment: SpanStmt = WithSpan {
+                span: increment.span,
+                value: Stmt::Expression(increment),
+            };
+            body = WithSpan {
+                span: body.span.union(&increment.span),
+                value: Stmt::Block(vec![body, increment]),
+            };
+        }
+
+        let condition = condition.unwrap_or_else(|| WithSpan {
+            span: cond_span,
+            value: Expr::Boolean(true),
+        });
+        body = WithSpan {
+            span: body.span.union(&condition.span),
+            value: Stmt::While(condition, Box::new(body)),
+        };
+
+        if let Some(initializer) = initializer {
+            body = WithSpan {
+                span: initializer.span.union(&body.span),
+                value: Stmt::Block(vec![initializer, body]),
+            };
+        }
+
+        body.span = span;
+
+        Ok(body)
     }
 
     /// block → "{" declaration* "}" ;
