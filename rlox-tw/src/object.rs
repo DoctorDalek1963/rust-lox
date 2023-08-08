@@ -1,18 +1,34 @@
 //! This module provides [`LoxObject`].
 
-use crate::span::WithSpan;
+use std::rc::Rc;
+
+use crate::{callable::LoxCallable, span::WithSpan};
 
 /// A [`LoxObject`] wrapped in [`WithSpan`].
 pub type SpanObject = WithSpan<LoxObject>;
 
 /// Possible objects in Lox.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 #[allow(clippy::missing_docs_in_private_items)]
 pub enum LoxObject {
     Nil,
     Boolean(bool),
     String(String),
     Number(f64),
+    NativeFunction(Rc<dyn LoxCallable>),
+}
+
+impl PartialEq for LoxObject {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nil, Self::Nil) => true,
+            (Self::Boolean(a), Self::Boolean(b)) => a == b,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::Number(a), Self::Number(b)) => a == b,
+            (Self::NativeFunction(a), Self::NativeFunction(b)) => a.name() == b.name(),
+            _ => false,
+        }
+    }
 }
 
 impl LoxObject {
@@ -25,6 +41,7 @@ impl LoxObject {
             Boolean(_) => "boolean".to_string(),
             String(_) => "string".to_string(),
             Number(_) => "number".to_string(),
+            NativeFunction(_) => "<native fn>".to_string(),
         }
     }
 
@@ -37,6 +54,7 @@ impl LoxObject {
             Boolean(b) => b.to_string(),
             String(s) => s.to_string(),
             Number(n) => n.to_string(),
+            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
         }
     }
 

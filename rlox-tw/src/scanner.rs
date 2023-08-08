@@ -173,7 +173,7 @@ impl<'s> Scanner<'s> {
         });
     }
 
-    /// Conditionally [`advance`] if the next char is the expected one.
+    /// Conditionally [`advance`](Self::advance) if the next char is the expected one.
     fn match_char(&mut self, expected: char) -> bool {
         if self.is_at_end() || (self.current_char() != Some(expected)) {
             false

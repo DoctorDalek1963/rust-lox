@@ -1,6 +1,6 @@
 //! This module handles the AST.
 
-use crate::span::WithSpan;
+use crate::span::{Span, WithSpan};
 use std::fmt;
 
 /// A binary operator - includes arithmetic and comparison.
@@ -92,6 +92,7 @@ pub enum Expr {
     Nil,
     Boolean(bool),
     Binary(Box<SpanExpr>, WithSpan<BinaryOperator>, Box<SpanExpr>),
+    Call(Box<SpanExpr>, Vec<SpanExpr>, Span),
     Grouping(Box<SpanExpr>),
     String(String),
     Number(f64),

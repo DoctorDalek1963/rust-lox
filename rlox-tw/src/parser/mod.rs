@@ -78,7 +78,9 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 /// comparison  → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 /// term        → factor ( ( "-" | "+" ) factor )* ;
 /// factor      → unary ( ( "/" | "*" ) unary )* ;
-/// unary       → ( "!" | "-" ) unary | primary ;
+/// unary       → ( "!" | "-" ) unary | call ;
+/// call        → primary ( "(" arguments? ")" )* ;
+/// arguments   → expression ( "," expression )* ;
 /// primary     → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 /// ```
 pub struct Parser<'s> {

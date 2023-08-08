@@ -6,6 +6,7 @@
 #![feature(iter_intersperse)]
 
 pub(crate) mod ast;
+pub(crate) mod callable;
 pub(crate) mod interpreter;
 pub(crate) mod lox;
 pub(crate) mod object;

@@ -67,6 +67,15 @@ impl ParenPrinter {
                     Self::print_expr(right)
                 )
             }
+            Expr::Call(callee, arguments, _) => format!(
+                "{}({})",
+                Self::print_expr(&callee),
+                arguments
+                    .iter()
+                    .map(|arg| Self::print_expr(&arg))
+                    .intersperse(", ".to_string())
+                    .collect::<String>()
+            ),
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),

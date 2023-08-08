@@ -3,6 +3,7 @@
 use super::{ParseError, ParseResult, Parser};
 use crate::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, UnaryOperator},
+    lox::report_non_runtime_error,
     span::WithSpan,
     tokens::{Token, TokenLiteral, TokenType},
 };
@@ -221,7 +222,7 @@ impl<'s> Parser<'s> {
         Ok(expr)
     }
 
-    /// unary → ( "!" | "-" ) unary | primary ;
+    /// unary → ( "!" | "-" ) unary | call ;
     fn parse_unary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
@@ -247,8 +248,69 @@ impl<'s> Parser<'s> {
             let value = Expr::Unary(operator, Box::new(right));
             Ok(WithSpan { span, value })
         } else {
-            self.parse_primary()
+            self.parse_call()
         }
+    }
+
+    /// call → primary ( "(" arguments? ")" )* ;
+    fn parse_call(&mut self) -> ParseResult<'s, SpanExpr> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            if self.match_tokens([TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    /// Finish parsing a function call by parsing the argument list and closing paren.
+    /// `arguments → expression ( "," expression )* ;`
+    fn finish_call(&mut self, callee: SpanExpr) -> ParseResult<'s, SpanExpr> {
+        let mut arguments: Vec<SpanExpr> = Vec::new();
+        let mut reported_max_args_error = false;
+
+        /// Get the combined span of the callee and all arguments that have been parsed so far.
+        macro_rules! get_callee_and_args_span {
+            () => {
+                arguments
+                    .iter()
+                    .map(|expr| expr.span)
+                    .fold(callee.span, |acc, current| acc.union(&current))
+            };
+        }
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if arguments.len() >= 255 && !reported_max_args_error {
+                    report_non_runtime_error(
+                        get_callee_and_args_span!(),
+                        "Cannot have more than 255 arguments in function call",
+                    );
+                    reported_max_args_error = true;
+                }
+
+                arguments.push(self.parse_expression()?);
+
+                if !self.match_tokens([TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let close_paren = self.consume(
+            TokenType::RightParen,
+            Some(get_callee_and_args_span!()),
+            "Expected ')' after arguments in function call".to_string(),
+        )?;
+
+        Ok(WithSpan {
+            span: callee.span.union(&close_paren.span),
+            value: Expr::Call(Box::new(callee), arguments, close_paren.span),
+        })
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;

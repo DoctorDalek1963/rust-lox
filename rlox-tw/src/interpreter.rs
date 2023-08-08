@@ -2,20 +2,21 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
+    callable::{native, LoxCallable},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{collections::HashMap, fmt, mem};
+use std::{collections::HashMap, fmt, mem, rc::Rc};
 use thiserror::Error;
 
 /// An error encountered by the interpreter at runtime.
 #[derive(Clone, Debug, PartialEq, Error)]
-struct RuntimeError {
+pub struct RuntimeError {
     /// The error message.
-    message: String,
+    pub message: String,
 
     /// The span where the error occurred.
-    span: Span,
+    pub span: Span,
 }
 
 /// A result wrapping a [`RuntimeError`].
@@ -101,9 +102,21 @@ pub struct TwInterpreter {
 impl TwInterpreter {
     /// Create a new tree-walk interpreter.
     pub fn new() -> Self {
-        Self {
-            environment: Environment::new(None),
+        use native::*;
+
+        let mut environment = Environment::new(None);
+
+        macro_rules! define_native_functions {
+            ( $($name:literal => $function:expr),* $(,)? ) => {
+                $(
+                    environment.define($name.to_string(), LoxObject::NativeFunction(Rc::new($function)));
+                )*
+            };
         }
+
+        define_native_functions!("clock" => Clock, "sleep_ns" => SleepNs);
+
+        Self { environment }
     }
 
     /// Interpret the given AST, reporting a runtime error if one occurs.
@@ -208,6 +221,9 @@ impl TwInterpreter {
                 let right = self.evaluate_expression(right)?;
                 self.evaluate_binary_expression(*operator, left, right)?
             }
+            Expr::Call(callee, arguments, close_paren) => {
+                self.evaluate_function_call(callee, arguments, close_paren)?
+            }
             Expr::Grouping(expr) => {
                 let value = self.evaluate_expression(expr)?.value;
                 WithSpan { span, value }
@@ -237,6 +253,53 @@ impl TwInterpreter {
                 value
             }
         })
+    }
+
+    /// Evaluate a function call with the given callee and arguments.
+    fn evaluate_function_call(
+        &mut self,
+        callee: &SpanExpr,
+        arguments: &[SpanExpr],
+        close_paren: &Span,
+    ) -> Result<SpanObject> {
+        let callee = self.evaluate_expression(callee)?;
+        let callee_span = callee.span;
+
+        let arguments: Vec<SpanObject> = arguments
+            .iter()
+            .map(|expr| self.evaluate_expression(expr))
+            .collect::<Result<Vec<SpanObject>>>()?;
+
+        let func = self.try_get_function(callee, close_paren)?;
+
+        if arguments.len() != func.arity() as usize {
+            return Err(func.bad_arity_error(callee_span, &arguments, *close_paren));
+        }
+
+        let value = func.call(self, callee_span, &arguments, *close_paren)?;
+
+        Ok(WithSpan {
+            span: callee_span.union(close_paren),
+            value,
+        })
+    }
+
+    /// Try to resolve a function from an object.
+    fn try_get_function(
+        &self,
+        callee: SpanObject,
+        close_paren: &Span,
+    ) -> Result<Rc<dyn LoxCallable>> {
+        match &callee.value {
+            LoxObject::NativeFunction(func) => Ok(Rc::clone(func)),
+            _ => Err(RuntimeError {
+                message: format!(
+                    "Can only call objects of type function or class, not {}",
+                    callee.value.type_name()
+                ),
+                span: callee.span.union(close_paren),
+            }),
+        }
     }
 
     /// Evaluate a logical expression by short-circuiting.
