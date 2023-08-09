@@ -114,6 +114,7 @@ pub enum Stmt {
     Expression(SpanExpr),
     If(SpanExpr, Box<SpanStmt>, Option<Box<SpanStmt>>),
     Print(SpanExpr),
+    Return(Span, Option<SpanExpr>),
     While(SpanExpr, Box<SpanStmt>),
     Block(Vec<SpanStmt>),
 }

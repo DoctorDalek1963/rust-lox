@@ -196,12 +196,14 @@ impl<'s> Parser<'s> {
         Ok(WithSpan { span, value })
     }
 
-    /// statement → exprStmt | ifStmt | printStmt | whileStmt | block ;
+    /// statement → exprStmt | ifStmt | printStmt | returnStmt | whileStmt | forStmt | block ;
     fn parse_statement(&mut self) -> ParseResult<'s, SpanStmt> {
         if self.match_tokens([TokenType::If]) {
             self.parse_if_statement()
         } else if self.match_tokens([TokenType::Print]) {
             self.parse_print_statement()
+        } else if self.match_tokens([TokenType::Return]) {
+            self.parse_return_statement()
         } else if self.match_tokens([TokenType::While]) {
             self.parse_while_loop()
         } else if self.match_tokens([TokenType::For]) {
@@ -289,6 +291,34 @@ impl<'s> Parser<'s> {
         let span = print_keyword_span.union(&semicolon_span);
         let value = Stmt::Print(value);
         Ok(WithSpan { span, value })
+    }
+
+    /// returnStmt → "return" expression? ";" ;
+    fn parse_return_statement(&mut self) -> ParseResult<'s, SpanStmt> {
+        let keyword_span = self.previous().unwrap().span;
+
+        let expr = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.parse_expression()?)
+        };
+
+        let semicolon_span = self
+            .consume(
+                TokenType::Semicolon,
+                Some(if let Some(expr) = &expr {
+                    expr.span.union(&keyword_span)
+                } else {
+                    keyword_span
+                }),
+                "Expected ';' after return value".to_string(),
+            )?
+            .span;
+
+        Ok(WithSpan {
+            span: keyword_span.union(&semicolon_span),
+            value: Stmt::Return(keyword_span, expr),
+        })
     }
 
     /// whileStmt → "while" "(" expression ")" statement ;

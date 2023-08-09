@@ -65,10 +65,11 @@ type ParseResult<'s, T, E = ParseError<'s>> = ::std::result::Result<T, E>;
 /// parameters  → IDENTIFIER ( "," IDENTIFIER )* ;
 /// varDecl     → "var" IDENTIFIER ( "=" expression )? ";" ;
 ///
-/// statement   → exprStmt | ifStmt | printStmt | whileStmt | forStmt | block ;
+/// statement   → exprStmt | ifStmt | printStmt | returnStmt | whileStmt | forStmt | block ;
 /// exprStmt    → expression ";" ;
 /// ifStmt      → "if" "(" expression ")" statement ( "else" statement )? ;
 /// printStmt   → "print" expression ";" ;
+/// returnStmt  → "return" expression? ";" ;
 /// whileStmt   → "while" "(" expression ")" statement ;
 /// forStmt     → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
 /// block       → "{" declaration* "}" ;

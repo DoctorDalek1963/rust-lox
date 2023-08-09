@@ -20,8 +20,23 @@ pub struct RuntimeError {
     pub span: Span,
 }
 
+/// A runtime error has occured or we need to return from a function call.
+pub enum ErrorOrReturn {
+    /// A [`RuntimeError`] has occured.
+    Error(RuntimeError),
+
+    /// Return from the current function.
+    Return(SpanObject),
+}
+
+impl From<RuntimeError> for ErrorOrReturn {
+    fn from(value: RuntimeError) -> Self {
+        Self::Error(value)
+    }
+}
+
 /// A result wrapping a [`RuntimeError`].
-type Result<T, E = RuntimeError> = ::std::result::Result<T, E>;
+type Result<T, E = ErrorOrReturn> = ::std::result::Result<T, E>;
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -77,7 +92,7 @@ impl TwInterpreter {
 
     /// Interpret the given AST, reporting a runtime error if one occurs.
     pub fn interpret(&mut self, stmts: &[SpanStmt]) {
-        if let Err(e) = self.execute_statements(stmts) {
+        if let Err(ErrorOrReturn::Error(e)) = self.execute_statements(stmts) {
             crate::lox::report_runtime_error(e.span, &e.message);
         }
     }
@@ -102,6 +117,7 @@ impl TwInterpreter {
                 self.execute_if_statement(condition, then_branch, else_branch)?
             }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
+            Stmt::Return(keyword_span, expr) => self.execute_return(keyword_span, expr)?,
             Stmt::While(condition, body) => self.execute_while_loop(condition, body)?,
             Stmt::Block(stmts) => self.execute_block(stmts, None)?,
         }
@@ -155,6 +171,19 @@ impl TwInterpreter {
         Ok(())
     }
 
+    fn execute_return(&mut self, keyword_span: &Span, expr: &Option<SpanExpr>) -> Result<()> {
+        let value = if let Some(expr) = expr {
+            self.evaluate_expression(expr)?
+        } else {
+            WithSpan {
+                span: *keyword_span,
+                value: LoxObject::Nil,
+            }
+        };
+
+        Err(ErrorOrReturn::Return(value))
+    }
+
     /// Execute a while loop.
     fn execute_while_loop(&mut self, condition: &SpanExpr, body: &SpanStmt) -> Result<()> {
         while self.evaluate_expression(condition)?.is_truthy() {
@@ -173,19 +202,18 @@ impl TwInterpreter {
         stmts: &[SpanStmt],
         environment: Option<Rc<RefCell<Environment>>>,
     ) -> Result<()> {
+        let original_env = Rc::clone(&self.current_env);
+
         if let Some(environment) = environment {
             self.current_env = environment;
         } else {
-            let original_env = mem::take(&mut self.current_env);
-            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(original_env))));
+            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(mem::take(
+                &mut self.current_env,
+            )))));
         }
 
         let result = self.execute_statements(stmts);
-        self.current_env = {
-            let x = self.current_env.borrow();
-            let y = x.enclosing.as_ref().unwrap();
-            Rc::clone(y)
-        };
+        self.current_env = original_env;
         result
     }
 
@@ -262,7 +290,9 @@ impl TwInterpreter {
         let func = self.try_get_function(callee, close_paren)?;
 
         if arguments.len() != func.arity() as usize {
-            return Err(func.bad_arity_error(callee_span, &arguments, *close_paren));
+            return Err(func
+                .bad_arity_error(callee_span, &arguments, *close_paren)
+                .into());
         }
 
         let value = func.call(self, callee_span, &arguments, *close_paren)?;
@@ -288,7 +318,8 @@ impl TwInterpreter {
                     callee.value.type_name()
                 ),
                 span: callee.span.union(close_paren),
-            }),
+            }
+            .into()),
         }
     }
 
@@ -353,9 +384,10 @@ impl TwInterpreter {
                 Slash => {
                     if *b == 0.0 {
                         return Err(RuntimeError {
-                            message: "Division by 0".to_string(),
                             span,
-                        });
+                            message: "Division by 0".to_string(),
+                        }
+                        .into());
                     } else {
                         Number(a / b)
                     }

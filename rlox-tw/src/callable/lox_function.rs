@@ -4,7 +4,7 @@ use crate::{
     ast::SpanStmt,
     callable::LoxCallable,
     environment::Environment,
-    interpreter::{RuntimeError, TwInterpreter},
+    interpreter::{ErrorOrReturn, RuntimeError, TwInterpreter},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
@@ -63,7 +63,10 @@ impl LoxCallable for LoxFunction {
             environment.define(self.parameters[i].value.clone(), arguments[i].value.clone());
         }
 
-        interpreter.execute_block(&self.body, Some(Rc::new(RefCell::new(environment))))?;
-        Ok(LoxObject::Nil)
+        match interpreter.execute_block(&self.body, Some(Rc::new(RefCell::new(environment)))) {
+            Err(ErrorOrReturn::Return(value)) => Ok(value.value),
+            Ok(()) => Ok(LoxObject::Nil),
+            Err(ErrorOrReturn::Error(e)) => Err(e),
+        }
     }
 }

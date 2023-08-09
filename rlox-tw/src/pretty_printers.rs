@@ -56,6 +56,12 @@ impl ParenPrinter {
                 }
             }
             Stmt::Print(expr) => format!("print {};", Self::print_expr(expr)),
+            Stmt::Return(_, expr) => format!(
+                "return{};",
+                expr.as_ref()
+                    .map(|expr| format!(" {}", Self::print_expr(expr)))
+                    .unwrap_or_else(|| String::new())
+            ),
             Stmt::While(condition, body) => format!(
                 "while ({}) {{ {} }}",
                 Self::print_expr(condition),
