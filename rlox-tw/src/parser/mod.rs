@@ -39,12 +39,12 @@ impl ParseError<'_> {
                 token,
                 previous_span: Some(span),
                 message,
-            } => report_non_runtime_error(span.union(&token.span), &message),
+            } => report_non_runtime_error(span.union(&token.span), message),
             Self {
                 token,
                 previous_span: None,
                 message,
-            } => report_token_error(&token, &message),
+            } => report_token_error(token, message),
         }
     }
 }

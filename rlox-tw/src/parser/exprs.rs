@@ -19,7 +19,7 @@ impl<'s> Parser<'s> {
         let expr = self.parse_logic_or()?;
 
         if self.match_tokens([TokenType::Equal]) {
-            let equals = self.previous().unwrap().clone();
+            let equals = *self.previous().unwrap();
             let r_value = self.parse_assignment()?;
 
             if let WithSpan {

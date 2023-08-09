@@ -38,15 +38,13 @@ impl Environment {
         if let Some(current) = self.values.get_mut(name) {
             *current = value;
             Ok(())
+        } else if let Some(env) = &mut self.enclosing {
+            env.borrow_mut().assign(name, value, span)
         } else {
-            if let Some(env) = &mut self.enclosing {
-                env.borrow_mut().assign(name, value, span)
-            } else {
-                Err(RuntimeError {
-                    message: format!("Undefined variable name '{name}'"),
-                    span,
-                })
-            }
+            Err(RuntimeError {
+                message: format!("Undefined variable name '{name}'"),
+                span,
+            })
         }
     }
 
@@ -54,15 +52,13 @@ impl Environment {
     pub fn get(&self, name: &str, span: Span) -> Result<LoxObject, RuntimeError> {
         if let Some(value) = self.values.get(name) {
             Ok(value.clone())
+        } else if let Some(env) = &self.enclosing {
+            env.borrow().get(name, span).clone()
         } else {
-            if let Some(env) = &self.enclosing {
-                env.borrow().get(name, span).clone()
-            } else {
-                Err(RuntimeError {
-                    span,
-                    message: format!("Undefined variable name '{name}'"),
-                })
-            }
+            Err(RuntimeError {
+                span,
+                message: format!("Undefined variable name '{name}'"),
+            })
         }
     }
 }

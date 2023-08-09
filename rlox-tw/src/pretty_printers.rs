@@ -10,7 +10,7 @@ impl ParenPrinter {
     pub fn print_stmts(stmts: &[SpanStmt]) -> String {
         stmts
             .iter()
-            .map(|stmt| Self::print_stmt(stmt))
+            .map(Self::print_stmt)
             .intersperse("\n".to_string())
             .collect()
     }
@@ -22,7 +22,7 @@ impl ParenPrinter {
                 "var {}{};",
                 name.value,
                 if let Some(expr) = initializer {
-                    format!(" = {}", Self::print_expr(&expr))
+                    format!(" = {}", Self::print_expr(expr))
                 } else {
                     String::new()
                 }
@@ -80,10 +80,10 @@ impl ParenPrinter {
             }
             Expr::Call(callee, arguments, _) => format!(
                 "{}({})",
-                Self::print_expr(&callee),
+                Self::print_expr(callee),
                 arguments
                     .iter()
-                    .map(|arg| Self::print_expr(&arg))
+                    .map(Self::print_expr)
                     .intersperse(", ".to_string())
                     .collect::<String>()
             ),

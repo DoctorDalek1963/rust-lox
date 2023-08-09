@@ -124,10 +124,10 @@ impl TwInterpreter {
     fn execute_fun_decl(
         &mut self,
         name: &WithSpan<String>,
-        parameters: &Vec<WithSpan<String>>,
-        body: &Vec<SpanStmt>,
+        parameters: &[WithSpan<String>],
+        body: &[SpanStmt],
     ) {
-        let function = LoxFunction::new(name.clone(), parameters.clone(), body.clone());
+        let function = LoxFunction::new(name.clone(), parameters.to_owned(), body.to_owned());
         self.current_env.borrow_mut().define(
             name.value.clone(),
             LoxObject::LoxFunction(Rc::new(function)),
@@ -138,20 +138,20 @@ impl TwInterpreter {
     fn execute_if_statement(
         &mut self,
         condition: &SpanExpr,
-        then_branch: &Box<SpanStmt>,
+        then_branch: &SpanStmt,
         else_branch: &Option<Box<SpanStmt>>,
     ) -> Result<()> {
         if self.evaluate_expression(condition)?.is_truthy() {
-            self.execute_statement(&then_branch)?;
+            self.execute_statement(then_branch)?;
         } else if let Some(else_branch) = else_branch {
-            self.execute_statement(&else_branch)?;
+            self.execute_statement(else_branch)?;
         }
 
         Ok(())
     }
 
     /// Execute a while loop.
-    fn execute_while_loop(&mut self, condition: &SpanExpr, body: &Box<SpanStmt>) -> Result<()> {
+    fn execute_while_loop(&mut self, condition: &SpanExpr, body: &SpanStmt) -> Result<()> {
         while self.evaluate_expression(condition)?.is_truthy() {
             self.execute_statement(body)?;
         }
@@ -179,7 +179,7 @@ impl TwInterpreter {
         self.current_env = {
             let x = self.current_env.borrow();
             let y = x.enclosing.as_ref().unwrap();
-            Rc::clone(&y)
+            Rc::clone(y)
         };
         result
     }

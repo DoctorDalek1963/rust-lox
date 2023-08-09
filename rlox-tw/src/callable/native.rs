@@ -33,7 +33,7 @@ impl LoxCallable for Clock {
     ) -> Result<LoxObject, RuntimeError> {
         Ok(LoxObject::Number(
             time::SystemTime::now()
-                .duration_since(time::UNIX_EPOCH.into())
+                .duration_since(time::UNIX_EPOCH)
                 .map_err(|error| RuntimeError {
                     message: format!("NATIVE FUNCTION INTERNAL ERROR: {error:?}"),
                     span: callee_span.union(&close_paren),

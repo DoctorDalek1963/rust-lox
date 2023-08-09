@@ -270,11 +270,7 @@ impl<'s> Parser<'s> {
 
         Ok(WithSpan {
             span: full_span,
-            value: Stmt::If(
-                condition,
-                Box::new(then_branch),
-                else_branch.map(|stmt| Box::new(stmt)),
-            ),
+            value: Stmt::If(condition, Box::new(then_branch), else_branch.map(Box::new)),
         })
     }
 
