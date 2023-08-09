@@ -10,7 +10,7 @@ pub struct Environment {
     pub enclosing: Option<Rc<RefCell<Environment>>>,
 
     /// A map of variable names to their values.
-    values: HashMap<String, LoxObject>,
+    pub values: HashMap<String, LoxObject>,
 }
 
 impl Default for Environment {

@@ -49,7 +49,7 @@ impl LoxObject {
         }
     }
 
-    /// Return the representation of the type to display when printing.
+    /// Return the representation of the object to display when printing.
     pub fn print(&self) -> String {
         use LoxObject::*;
 
@@ -57,6 +57,20 @@ impl LoxObject {
             Nil => "nil".to_string(),
             Boolean(b) => b.to_string(),
             String(s) => s.to_string(),
+            Number(n) => n.to_string(),
+            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
+            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
+        }
+    }
+
+    /// Return the representation of the object to display in the REPL.
+    pub fn repr(&self) -> String {
+        use LoxObject::*;
+
+        match self {
+            Nil => "nil".to_string(),
+            Boolean(b) => b.to_string(),
+            String(s) => format!("{s:?}"),
             Number(n) => n.to_string(),
             NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
             LoxFunction(func) => format!("<fn \"{}\">", func.name()),

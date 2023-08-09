@@ -2,7 +2,7 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
-    callable::{lox_function::LoxFunction, native, LoxCallable},
+    callable::{self, lox_function::LoxFunction, LoxCallable},
     environment::Environment,
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
@@ -42,22 +42,22 @@ pub struct TwInterpreter {
 impl TwInterpreter {
     /// Create a new tree-walk interpreter.
     pub fn new() -> Self {
-        use native::*;
+        use callable::native::*;
 
         let environment = Rc::new(RefCell::new(Environment::default()));
 
         macro_rules! define_native_functions {
-            ( $($name:literal => $function:expr),* $(,)? ) => {
+            ( $($function:expr),* $(,)? ) => {
                 $(
                     environment.borrow_mut().define(
-                        $name.to_string(),
+                        $function.name().to_string(),
                         LoxObject::NativeFunction(Rc::new($function))
                     );
                 )*
             };
         }
 
-        define_native_functions!("clock" => Clock, "sleep_ns" => SleepNs);
+        define_native_functions!(Bool, Clock, Env, Pow, SleepNs, Str);
 
         Self {
             global_env: Rc::clone(&environment),
@@ -68,6 +68,11 @@ impl TwInterpreter {
     /// Get an `Rc` to the interpreter's global environment.
     pub fn get_global_env(&self) -> Rc<RefCell<Environment>> {
         Rc::clone(&self.global_env)
+    }
+
+    /// Get an `Rc` to the interpreter's current environment.
+    pub fn get_current_env(&self) -> Rc<RefCell<Environment>> {
+        Rc::clone(&self.current_env)
     }
 
     /// Interpret the given AST, reporting a runtime error if one occurs.
