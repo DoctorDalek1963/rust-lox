@@ -21,6 +21,9 @@ pub struct LoxFunction {
 
     /// The body of the function.
     body: Box<[SpanStmt]>,
+
+    /// The environment that the function was defined in.
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl LoxFunction {
@@ -29,11 +32,13 @@ impl LoxFunction {
         name: WithSpan<String>,
         parameters: impl Into<Box<[WithSpan<String>]>>,
         body: impl Into<Box<[SpanStmt]>>,
+        environment: Rc<RefCell<Environment>>,
     ) -> Self {
         Self {
             name,
             parameters: parameters.into(),
             body: body.into(),
+            environment,
         }
     }
 }
@@ -57,7 +62,7 @@ impl LoxCallable for LoxFunction {
         arguments: &[SpanObject],
         _close_paren: Span,
     ) -> Result<LoxObject, RuntimeError> {
-        let mut environment = Environment::enclosing(Some(interpreter.get_global_env()));
+        let mut environment = Environment::enclosing(Some(Rc::clone(&self.environment)));
 
         for i in 0..self.parameters.len() {
             environment.define(self.parameters[i].value.clone(), arguments[i].value.clone());

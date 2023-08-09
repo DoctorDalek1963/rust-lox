@@ -80,11 +80,6 @@ impl TwInterpreter {
         }
     }
 
-    /// Get an `Rc` to the interpreter's global environment.
-    pub fn get_global_env(&self) -> Rc<RefCell<Environment>> {
-        Rc::clone(&self.global_env)
-    }
-
     /// Get an `Rc` to the interpreter's current environment.
     pub fn get_current_env(&self) -> Rc<RefCell<Environment>> {
         Rc::clone(&self.current_env)
@@ -148,7 +143,12 @@ impl TwInterpreter {
         parameters: &[WithSpan<String>],
         body: &[SpanStmt],
     ) {
-        let function = LoxFunction::new(name.clone(), parameters.to_owned(), body.to_owned());
+        let function = LoxFunction::new(
+            name.clone(),
+            parameters.to_owned(),
+            body.to_owned(),
+            self.get_current_env(),
+        );
         self.current_env.borrow_mut().define(
             name.value.clone(),
             LoxObject::LoxFunction(Rc::new(function)),

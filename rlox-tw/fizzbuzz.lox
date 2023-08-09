@@ -1,5 +1,5 @@
 fun mod(a, b) {
-	while (a - b > 0) a = a - b;
+	while (a - b >= 0) a = a - b;
 	return a;
 }
 
