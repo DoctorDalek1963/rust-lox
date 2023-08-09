@@ -1,16 +1,40 @@
 //! This module lets the [`Parser`] parse statements.
 
+use std::fmt;
+
 use super::{ParseResult, Parser};
 use crate::{
     ast::{Expr, SpanStmt, Stmt},
+    lox::report_non_runtime_error,
     span::{Span, WithSpan},
-    tokens::TokenType,
+    tokens::{Token, TokenType},
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FunDeclKind {
+    Function,
+    //Method
+}
+
+impl fmt::Display for FunDeclKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Function => "function",
+                //Self::Method => "method",
+            }
+        )
+    }
+}
+
 impl<'s> Parser<'s> {
-    /// declaration → varDecl | statement ;
+    /// declaration → funDecl | varDecl | statement ;
     pub(super) fn parse_declaration(&mut self) -> Option<SpanStmt> {
-        let result = if self.match_tokens([TokenType::Var]) {
+        let result = if self.match_tokens([TokenType::Fun]) {
+            self.parse_function(FunDeclKind::Function)
+        } else if self.match_tokens([TokenType::Var]) {
             self.parse_var_decl()
         } else {
             self.parse_statement()
@@ -24,6 +48,116 @@ impl<'s> Parser<'s> {
                 None
             }
         }
+    }
+
+    /// function → IDENTIFIER "(" parameters? ")" block ;
+    /// parameters → IDENTIFIER ( "," IDENTIFIER )* ;
+    fn parse_function(&mut self, kind: FunDeclKind) -> ParseResult<'s, SpanStmt> {
+        let previous_span = if kind == FunDeclKind::Function {
+            self.previous().map(|token| token.span)
+        } else {
+            None
+        };
+
+        let name = {
+            let Token { lexeme, span, .. } = self.consume(
+                TokenType::Identifier,
+                previous_span,
+                format!("Expected {kind} name"),
+            )?;
+            WithSpan {
+                span,
+                value: lexeme.to_string(),
+            }
+        };
+
+        let mut span = name.span;
+        if let Some(prev) = previous_span {
+            span = span.union(&prev);
+        }
+
+        span = span.union(
+            &self
+                .consume(
+                    TokenType::LeftParen,
+                    Some(span),
+                    format!("Expected '(' after {kind} name"),
+                )?
+                .span,
+        );
+
+        let mut parameters: Vec<WithSpan<String>> = Vec::new();
+        let mut reported_max_params_error = false;
+
+        macro_rules! get_declaration_and_params_span {
+            () => {
+                parameters
+                    .iter()
+                    .map(|x| x.span)
+                    .fold(span, |acc, span| acc.union(&span))
+            };
+        }
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 255 && !reported_max_params_error {
+                    report_non_runtime_error(
+                        get_declaration_and_params_span!(),
+                        &format!("Cannot have more than 255 parameters in a {kind} declaration"),
+                    );
+                    reported_max_params_error = true;
+                }
+
+                let Token {
+                    lexeme,
+                    span: token_span,
+                    ..
+                } = self.consume(
+                    TokenType::Identifier,
+                    Some(get_declaration_and_params_span!()),
+                    "Expected parameter name".to_string(),
+                )?;
+
+                span = span.union(&token_span);
+
+                parameters.push(WithSpan {
+                    span: token_span,
+                    value: lexeme.to_string(),
+                });
+
+                if !self.match_tokens([TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        span = span.union(
+            &self
+                .consume(
+                    TokenType::RightParen,
+                    Some(span),
+                    format!("Expected ')' after {kind} parameters"),
+                )?
+                .span,
+        );
+
+        span = span.union(
+            &self
+                .consume(
+                    TokenType::LeftBrace,
+                    Some(span),
+                    format!("Expected '{{' before {kind} body"),
+                )?
+                .span,
+        );
+
+        let stmts = self.parse_block()?;
+        span = span.union(&stmts.span);
+
+        Ok(WithSpan {
+            span,
+            value: Stmt::FunDecl(name, parameters, stmts.value),
+        })
     }
 
     /// varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;

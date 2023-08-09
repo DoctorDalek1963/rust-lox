@@ -1,8 +1,10 @@
 //! This module provides [`LoxObject`].
 
+use crate::{
+    callable::{lox_function::LoxFunction, LoxCallable},
+    span::WithSpan,
+};
 use std::rc::Rc;
-
-use crate::{callable::LoxCallable, span::WithSpan};
 
 /// A [`LoxObject`] wrapped in [`WithSpan`].
 pub type SpanObject = WithSpan<LoxObject>;
@@ -16,6 +18,7 @@ pub enum LoxObject {
     String(String),
     Number(f64),
     NativeFunction(Rc<dyn LoxCallable>),
+    LoxFunction(Rc<LoxFunction>),
 }
 
 impl PartialEq for LoxObject {
@@ -42,6 +45,7 @@ impl LoxObject {
             String(_) => "string".to_string(),
             Number(_) => "number".to_string(),
             NativeFunction(_) => "<native fn>".to_string(),
+            LoxFunction(_) => "<fn>".to_string(),
         }
     }
 
@@ -55,6 +59,7 @@ impl LoxObject {
             String(s) => s.to_string(),
             Number(n) => n.to_string(),
             NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
+            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
         }
     }
 

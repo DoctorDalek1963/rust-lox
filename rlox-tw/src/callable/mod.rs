@@ -1,5 +1,6 @@
 //! This module provides the [`LoxCallable`] trait.
 
+pub mod lox_function;
 pub mod native;
 
 use crate::{

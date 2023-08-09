@@ -27,6 +27,17 @@ impl ParenPrinter {
                     String::new()
                 }
             ),
+            Stmt::FunDecl(name, parameters, body) => format!(
+                "fun {}({}) {{\n{}\n}}",
+                name.value,
+                parameters
+                    .iter()
+                    .map(|x| &x.value)
+                    .intersperse(&", ".to_string())
+                    .cloned()
+                    .collect::<String>(),
+                Self::print_stmts(body)
+            ),
             Stmt::Expression(expr) => format!("{};", Self::print_expr(expr)),
             Stmt::If(condition, then_branch, else_branch) => {
                 if let Some(else_branch) = else_branch {

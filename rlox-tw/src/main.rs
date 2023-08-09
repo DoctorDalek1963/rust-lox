@@ -7,6 +7,7 @@
 
 pub(crate) mod ast;
 pub(crate) mod callable;
+pub(crate) mod environment;
 pub(crate) mod interpreter;
 pub(crate) mod lox;
 pub(crate) mod object;

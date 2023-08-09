@@ -2,11 +2,12 @@
 
 use crate::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
-    callable::{native, LoxCallable},
+    callable::{lox_function::LoxFunction, native, LoxCallable},
+    environment::Environment,
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{collections::HashMap, fmt, mem, rc::Rc};
+use std::{cell::RefCell, fmt, mem, rc::Rc};
 use thiserror::Error;
 
 /// An error encountered by the interpreter at runtime.
@@ -28,75 +29,14 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-/// The environment of defined values in the current interpreter session.
-#[derive(Clone, Debug, PartialEq)]
-struct Environment {
-    /// The enclosing environment.
-    enclosing: Option<Box<Environment>>,
-
-    /// A map of variable names to their values.
-    values: HashMap<String, LoxObject>,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self::new(None)
-    }
-}
-
-impl Environment {
-    /// Create a new, empty environment.
-    fn new(enclosing: Option<Box<Self>>) -> Self {
-        Self {
-            enclosing,
-            values: HashMap::new(),
-        }
-    }
-
-    /// Define a new variable with the given value.
-    fn define(&mut self, name: String, value: LoxObject) {
-        self.values.insert(name, value);
-    }
-
-    /// Re-assign an already existing variable. Returns a [`RuntimeError`] if the name is undefined.
-    fn assign(&mut self, name: &str, value: LoxObject, span: Span) -> Result<()> {
-        if let Some(current) = self.values.get_mut(name) {
-            *current = value;
-            Ok(())
-        } else {
-            if let Some(env) = &mut self.enclosing {
-                env.assign(name, value, span)
-            } else {
-                Err(RuntimeError {
-                    message: format!("Undefined variable name '{name}'"),
-                    span,
-                })
-            }
-        }
-    }
-
-    /// Get the value of the given variable, returning a [`RuntimeError`] if the name is undefined.
-    fn get(&self, name: &str, span: Span) -> Result<&LoxObject> {
-        if let Some(value) = self.values.get(name) {
-            Ok(value)
-        } else {
-            if let Some(env) = &self.enclosing {
-                env.get(name, span)
-            } else {
-                Err(RuntimeError {
-                    span,
-                    message: format!("Undefined variable name '{name}'"),
-                })
-            }
-        }
-    }
-}
-
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TwInterpreter {
+    /// The global environment.
+    global_env: Rc<RefCell<Environment>>,
+
     /// The environment of defined values in the current interpreter session.
-    environment: Environment,
+    current_env: Rc<RefCell<Environment>>,
 }
 
 impl TwInterpreter {
@@ -104,19 +44,30 @@ impl TwInterpreter {
     pub fn new() -> Self {
         use native::*;
 
-        let mut environment = Environment::new(None);
+        let environment = Rc::new(RefCell::new(Environment::default()));
 
         macro_rules! define_native_functions {
             ( $($name:literal => $function:expr),* $(,)? ) => {
                 $(
-                    environment.define($name.to_string(), LoxObject::NativeFunction(Rc::new($function)));
+                    environment.borrow_mut().define(
+                        $name.to_string(),
+                        LoxObject::NativeFunction(Rc::new($function))
+                    );
                 )*
             };
         }
 
         define_native_functions!("clock" => Clock, "sleep_ns" => SleepNs);
 
-        Self { environment }
+        Self {
+            global_env: Rc::clone(&environment),
+            current_env: environment,
+        }
+    }
+
+    /// Get an `Rc` to the interpreter's global environment.
+    pub fn get_global_env(&self) -> Rc<RefCell<Environment>> {
+        Rc::clone(&self.global_env)
     }
 
     /// Interpret the given AST, reporting a runtime error if one occurs.
@@ -138,6 +89,7 @@ impl TwInterpreter {
     fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
         match &stmt.value {
             Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
+            Stmt::FunDecl(name, parameters, body) => self.execute_fun_decl(name, parameters, body),
             Stmt::Expression(expr) => {
                 self.evaluate_expression(expr)?;
             }
@@ -146,7 +98,7 @@ impl TwInterpreter {
             }
             Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
             Stmt::While(condition, body) => self.execute_while_loop(condition, body)?,
-            Stmt::Block(stmts) => self.execute_block(stmts)?,
+            Stmt::Block(stmts) => self.execute_block(stmts, None)?,
         }
 
         Ok(())
@@ -162,8 +114,24 @@ impl TwInterpreter {
             Some(expr) => self.evaluate_expression(expr)?.value,
             None => LoxObject::Nil,
         };
-        self.environment.define(name.value.clone(), value);
+        self.current_env
+            .borrow_mut()
+            .define(name.value.clone(), value);
         Ok(())
+    }
+
+    /// Execute a function declaration in the current environment.
+    fn execute_fun_decl(
+        &mut self,
+        name: &WithSpan<String>,
+        parameters: &Vec<WithSpan<String>>,
+        body: &Vec<SpanStmt>,
+    ) {
+        let function = LoxFunction::new(name.clone(), parameters.clone(), body.clone());
+        self.current_env.borrow_mut().define(
+            name.value.clone(),
+            LoxObject::LoxFunction(Rc::new(function)),
+        );
     }
 
     /// Execute an `if` statement.
@@ -191,14 +159,28 @@ impl TwInterpreter {
         Ok(())
     }
 
-    /// Execute the given block, creating a new environment for it and resetting the environment at
-    /// the end.
-    fn execute_block(&mut self, stmts: &[SpanStmt]) -> Result<()> {
-        let original_env = mem::take(&mut self.environment);
-        self.environment = Environment::new(Some(Box::new(original_env)));
+    /// Execute the given block.
+    ///
+    /// If the environment argument is Some, then we use that environment. Otherwise, we create a
+    /// new one for this block. Either way, we restore the parent environment at the end.
+    pub fn execute_block(
+        &mut self,
+        stmts: &[SpanStmt],
+        environment: Option<Rc<RefCell<Environment>>>,
+    ) -> Result<()> {
+        if let Some(environment) = environment {
+            self.current_env = environment;
+        } else {
+            let original_env = mem::take(&mut self.current_env);
+            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(original_env))));
+        }
 
         let result = self.execute_statements(stmts);
-        self.environment = *mem::take(&mut self.environment.enclosing).unwrap();
+        self.current_env = {
+            let x = self.current_env.borrow();
+            let y = x.enclosing.as_ref().unwrap();
+            Rc::clone(&y)
+        };
         result
     }
 
@@ -245,11 +227,13 @@ impl TwInterpreter {
             }
             Expr::Variable(name) => WithSpan {
                 span,
-                value: self.environment.get(name, span)?.clone(),
+                value: self.current_env.borrow().get(name, span)?.clone(),
             },
             Expr::Assign(name, expr) => {
                 let value = self.evaluate_expression(expr)?;
-                self.environment.assign(name, value.value.clone(), span)?;
+                self.current_env
+                    .borrow_mut()
+                    .assign(name, value.value.clone(), span)?;
                 value
             }
         })
@@ -292,6 +276,7 @@ impl TwInterpreter {
     ) -> Result<Rc<dyn LoxCallable>> {
         match &callee.value {
             LoxObject::NativeFunction(func) => Ok(Rc::clone(func)),
+            LoxObject::LoxFunction(func) => Ok(Rc::clone(func) as Rc<dyn LoxCallable>),
             _ => Err(RuntimeError {
                 message: format!(
                     "Can only call objects of type function or class, not {}",
