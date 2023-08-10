@@ -1,48 +1,14 @@
 //! This module provides [`TwInterpreter`].
 
-use crate::{
+use rlox_lib::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
     callable::{self, lox_function::LoxFunction, LoxCallable},
     environment::Environment,
+    interpreter::{ErrorOrReturn, Interpreter, Result, RuntimeError},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{cell::RefCell, fmt, mem, rc::Rc};
-use thiserror::Error;
-
-/// An error encountered by the interpreter at runtime.
-#[derive(Clone, Debug, PartialEq, Error)]
-pub struct RuntimeError {
-    /// The error message.
-    pub message: String,
-
-    /// The span where the error occurred.
-    pub span: Span,
-}
-
-/// A runtime error has occured or we need to return from a function call.
-pub enum ErrorOrReturn {
-    /// A [`RuntimeError`] has occured.
-    Error(RuntimeError),
-
-    /// Return from the current function.
-    Return(SpanObject),
-}
-
-impl From<RuntimeError> for ErrorOrReturn {
-    fn from(value: RuntimeError) -> Self {
-        Self::Error(value)
-    }
-}
-
-/// A result wrapping a [`RuntimeError`].
-type Result<T, E = ErrorOrReturn> = ::std::result::Result<T, E>;
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "RuntimeError({:?})", self.message)
-    }
-}
+use std::{cell::RefCell, mem, rc::Rc};
 
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,9 +20,8 @@ pub struct TwInterpreter {
     current_env: Rc<RefCell<Environment>>,
 }
 
-impl TwInterpreter {
-    /// Create a new tree-walk interpreter.
-    pub fn new() -> Self {
+impl Interpreter for TwInterpreter {
+    fn new() -> Self {
         use callable::native::*;
 
         let environment = Rc::new(RefCell::new(Environment::default()));
@@ -80,18 +45,38 @@ impl TwInterpreter {
         }
     }
 
-    /// Get an `Rc` to the interpreter's current environment.
-    pub fn get_current_env(&self) -> Rc<RefCell<Environment>> {
+    fn get_current_env(&self) -> Rc<RefCell<Environment>> {
         Rc::clone(&self.current_env)
     }
 
-    /// Interpret the given AST, reporting a runtime error if one occurs.
-    pub fn interpret(&mut self, stmts: &[SpanStmt]) {
+    fn interpret(&mut self, stmts: &[SpanStmt]) {
         if let Err(ErrorOrReturn::Error(e)) = self.execute_statements(stmts) {
-            crate::lox::report_runtime_error(e.span, &e.message);
+            rlox_lib::lox::report_runtime_error(e.span, &e.message);
         }
     }
 
+    fn execute_block(
+        &mut self,
+        stmts: &[SpanStmt],
+        environment: Option<Rc<RefCell<Environment>>>,
+    ) -> Result<()> {
+        let original_env = Rc::clone(&self.current_env);
+
+        if let Some(environment) = environment {
+            self.current_env = environment;
+        } else {
+            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(mem::take(
+                &mut self.current_env,
+            )))));
+        }
+
+        let result = self.execute_statements(stmts);
+        self.current_env = original_env;
+        result
+    }
+}
+
+impl TwInterpreter {
     /// Execute the given statements.
     fn execute_statements(&mut self, stmts: &[SpanStmt]) -> Result<()> {
         for stmt in stmts {
@@ -191,30 +176,6 @@ impl TwInterpreter {
         }
 
         Ok(())
-    }
-
-    /// Execute the given block.
-    ///
-    /// If the environment argument is Some, then we use that environment. Otherwise, we create a
-    /// new one for this block. Either way, we restore the parent environment at the end.
-    pub fn execute_block(
-        &mut self,
-        stmts: &[SpanStmt],
-        environment: Option<Rc<RefCell<Environment>>>,
-    ) -> Result<()> {
-        let original_env = Rc::clone(&self.current_env);
-
-        if let Some(environment) = environment {
-            self.current_env = environment;
-        } else {
-            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(mem::take(
-                &mut self.current_env,
-            )))));
-        }
-
-        let result = self.execute_statements(stmts);
-        self.current_env = original_env;
-        result
     }
 
     /// Evaluate the given expression.

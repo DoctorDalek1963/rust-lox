@@ -4,7 +4,7 @@ pub mod lox_function;
 pub mod native;
 
 use crate::{
-    interpreter::{RuntimeError, TwInterpreter},
+    interpreter::{Interpreter, RuntimeError},
     object::{LoxObject, SpanObject},
     span::Span,
 };
@@ -25,7 +25,7 @@ pub trait LoxCallable: fmt::Debug {
     /// function.
     fn call(
         &self,
-        interpreter: &mut TwInterpreter,
+        interpreter: &mut dyn Interpreter,
         callee_span: Span,
         arguments: &[SpanObject],
         close_paren: Span,

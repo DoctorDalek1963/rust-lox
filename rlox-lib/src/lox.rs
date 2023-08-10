@@ -1,12 +1,12 @@
 //! This module acts as a top-level entrypoint to evaluating Lox code.
 
 use crate::{
-    interpreter::TwInterpreter,
     parser::Parser,
     pretty_printers::ParenPrinter,
     scanner::Scanner,
     span::{LineOffsets, Span},
     tokens::{Token, TokenType},
+    Interpreter,
 };
 use lazy_static::lazy_static;
 use rustyline::{error::ReadlineError, DefaultEditor};
@@ -19,7 +19,7 @@ use std::{
     },
 };
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 /// Have we encountered at least one error before runtime?
 static HAD_NON_RUNTIME_ERROR: AtomicBool = AtomicBool::new(false);
@@ -37,9 +37,9 @@ lazy_static! {
 
 /// The Lox interpreter.
 #[derive(Clone, Debug)]
-pub struct LoxInterpreter {
+pub struct LoxInterpreter<T: Interpreter> {
     /// The core interpreter implementation to use.
-    interpreter: TwInterpreter,
+    interpreter: T,
 }
 
 /// An error that can be returned from [`LoxInterpreter::run_prompt`].
@@ -54,11 +54,11 @@ pub enum PromptError {
     Io(#[from] io::Error),
 }
 
-impl LoxInterpreter {
+impl<T: Interpreter> LoxInterpreter<T> {
     /// Create a new interpreter.
     pub fn new() -> Self {
         Self {
-            interpreter: TwInterpreter::new(),
+            interpreter: T::new(),
         }
     }
 
@@ -177,9 +177,9 @@ fn print_error_message(span: Option<Span>, message: &str) {
         let line_number_width =
             cmp::max(start_line.to_string().len(), end_line.to_string().len()) + 1;
 
-        debug!(?span);
-        debug!(?start_line, ?start_nl, ?start_col);
-        debug!(?end_line, ?end_nl, ?end_col);
+        trace!(?span);
+        trace!(?start_line, ?start_nl, ?start_col);
+        trace!(?end_line, ?end_nl, ?end_col);
 
         let mut message = format!(": {message}\n");
         message.push_str(&format!(

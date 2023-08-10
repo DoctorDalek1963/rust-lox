@@ -3,7 +3,7 @@
 use super::LoxCallable;
 use crate::{
     environment::Environment,
-    interpreter::{RuntimeError, TwInterpreter},
+    interpreter::{Interpreter, RuntimeError},
     object::{LoxObject, SpanObject},
     span::Span,
 };
@@ -27,7 +27,7 @@ impl LoxCallable for Bool {
 
     fn call(
         &self,
-        _interpreter: &mut TwInterpreter,
+        _interpreter: &mut dyn Interpreter,
         callee_span: Span,
         arguments: &[SpanObject],
         close_paren: Span,
@@ -55,7 +55,7 @@ impl LoxCallable for Clock {
 
     fn call(
         &self,
-        _interpreter: &mut TwInterpreter,
+        _interpreter: &mut dyn Interpreter,
         callee_span: Span,
         _arguments: &[SpanObject],
         close_paren: Span,
@@ -88,7 +88,7 @@ impl LoxCallable for Env {
 
     fn call(
         &self,
-        interpreter: &mut TwInterpreter,
+        interpreter: &mut dyn Interpreter,
         _callee_span: Span,
         _arguments: &[SpanObject],
         _close_paren: Span,
@@ -216,7 +216,7 @@ impl LoxCallable for Pow {
 
     fn call(
         &self,
-        _interpreter: &mut TwInterpreter,
+        _interpreter: &mut dyn Interpreter,
         callee_span: Span,
         arguments: &[SpanObject],
         close_paren: Span,
@@ -251,7 +251,7 @@ impl LoxCallable for SleepNs {
 
     fn call(
         &self,
-        _interpreter: &mut TwInterpreter,
+        _interpreter: &mut dyn Interpreter,
         callee_span: Span,
         arguments: &[SpanObject],
         close_paren: Span,
@@ -284,7 +284,7 @@ impl LoxCallable for Str {
 
     fn call(
         &self,
-        _interpreter: &mut TwInterpreter,
+        _interpreter: &mut dyn Interpreter,
         callee_span: Span,
         arguments: &[SpanObject],
         close_paren: Span,

@@ -4,7 +4,7 @@ use crate::{
     ast::SpanStmt,
     callable::LoxCallable,
     environment::Environment,
-    interpreter::{ErrorOrReturn, RuntimeError, TwInterpreter},
+    interpreter::{ErrorOrReturn, Interpreter, RuntimeError},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
@@ -57,7 +57,7 @@ impl LoxCallable for LoxFunction {
 
     fn call(
         &self,
-        interpreter: &mut TwInterpreter,
+        interpreter: &mut dyn Interpreter,
         _callee_span: Span,
         arguments: &[SpanObject],
         _close_paren: Span,
