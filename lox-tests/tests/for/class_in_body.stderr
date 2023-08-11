@@ -1,0 +1,5 @@
+ERROR: at 'class': Expected expression, got Class
+ --> 2:10
+  |
+2 | for (;;) class Foo {}
+  |          ^---^

@@ -204,3 +204,90 @@ impl<'s> Parser<'s> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ast::{BinaryOperator, Expr, Stmt, UnaryOperator},
+        scanner::Scanner,
+        span::WithSpan,
+    };
+
+    #[test]
+    fn parse() {
+        let ast: Vec<_> = Parser::parse(Scanner::scan_tokens("print (5 - (3.2 / 1)) + -1;"))
+            .into_iter()
+            .map(|stmt| stmt.value)
+            .collect();
+
+        #[allow(illegal_floating_point_literal_pattern)]
+        let &[Stmt::Print(WithSpan {
+            span: _,
+            value:
+                Expr::Binary(
+                    box WithSpan {
+                        span: _,
+                        value:
+                            Expr::Grouping(box WithSpan {
+                                span: _,
+                                value:
+                                    Expr::Binary(
+                                        box WithSpan {
+                                            span: _,
+                                            value: Expr::Number(5.0),
+                                        },
+                                        WithSpan {
+                                            span: _,
+                                            value: BinaryOperator::Minus,
+                                        },
+                                        box WithSpan {
+                                            span: _,
+                                            value:
+                                                Expr::Grouping(box WithSpan {
+                                                    span: _,
+                                                    value:
+                                                        Expr::Binary(
+                                                            box WithSpan {
+                                                                span: _,
+                                                                value: Expr::Number(3.2),
+                                                            },
+                                                            WithSpan {
+                                                                span: _,
+                                                                value: BinaryOperator::Slash,
+                                                            },
+                                                            box WithSpan {
+                                                                span: _,
+                                                                value: Expr::Number(1.0),
+                                                            },
+                                                        ),
+                                                }),
+                                        },
+                                    ),
+                            }),
+                    },
+                    WithSpan {
+                        span: _,
+                        value: BinaryOperator::Plus,
+                    },
+                    box WithSpan {
+                        span: _,
+                        value:
+                            Expr::Unary(
+                                WithSpan {
+                                    span: _,
+                                    value: UnaryOperator::Minus,
+                                },
+                                box WithSpan {
+                                    span: _,
+                                    value: Expr::Number(1.0),
+                                },
+                            ),
+                    },
+                ),
+        })] = &ast[..]
+        else {
+            panic!("Parsed statements did not match expected pattern. Parsed statements: {ast:#?}")
+        };
+    }
+}

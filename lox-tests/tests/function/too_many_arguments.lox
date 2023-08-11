@@ -1,0 +1,22 @@
+fun foo() {}
+{
+  var a = 1;
+  foo(
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a,
+    a, a, a, a, a, a, a, a, a, a, a, a, a, a, a, a);
+    // Error at 'a': Can't have more than 255 arguments.
+}

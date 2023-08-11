@@ -1,0 +1,5 @@
+ERROR: at 'var': Expected expression, got Var
+ --> 2:22
+  |
+2 | if (true) "ok"; else var foo;
+  |                      ^-^

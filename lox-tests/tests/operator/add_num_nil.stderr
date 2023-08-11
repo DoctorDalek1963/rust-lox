@@ -1,0 +1,5 @@
+ERROR: Unsupported operation '+' between types 'number' and 'nil'
+ --> 1:1
+  |
+1 | 1 + nil; // expect runtime error: Operands must be two numbers or two strings.
+  | ^-----^

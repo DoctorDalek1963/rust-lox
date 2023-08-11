@@ -1,0 +1,10 @@
+var big = 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999
+var inf = big * big * big * big;
+var nan = inf / -inf;
+
+print nan == 0; // expect: false
+print nan != 1; // expect: true
+
+// NaN is not equal to self.
+print nan == nan; // expect: false
+print nan != nan; // expect: true

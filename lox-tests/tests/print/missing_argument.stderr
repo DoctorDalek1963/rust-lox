@@ -1,0 +1,5 @@
+ERROR: at ';': Expected expression, got Semicolon
+ --> 2:6
+  |
+2 | print;
+  |      ^

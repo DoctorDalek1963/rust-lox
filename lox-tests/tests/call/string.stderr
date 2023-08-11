@@ -1,0 +1,5 @@
+ERROR: Can only call objects of type function or class, not string
+ --> 1:1
+  |
+1 | "str"(); // expect runtime error: Can only call functions and classes.
+  | ^-----^

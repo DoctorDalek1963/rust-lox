@@ -1,6 +1,7 @@
 //! This crate contains a tree-walk interpreter for Lox, as described in
 //! <https://craftinginterpreters.com/a-tree-walk-interpreter.html>.
 
+#![feature(box_patterns)]
 #![feature(file_create_new)]
 #![feature(fs_try_exists)]
 #![feature(iter_intersperse)]

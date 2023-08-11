@@ -1,0 +1,11 @@
+ERROR: at '{': Expected expression, got LeftBrace
+ --> 3:17
+  |
+3 | for (var a = 1; {}; a = a + 1) {}
+  |                 ^
+
+ERROR: Expected ';' after expression
+ --> 3:21
+  |
+3 | for (var a = 1; {}; a = a + 1) {}
+  |                     ^--------^

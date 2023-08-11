@@ -379,7 +379,22 @@ impl TwInterpreter {
                 BangEqual => Boolean(a != b),
                 _ => unsupported()?,
             },
-            _ => unsupported()?,
+            (NativeFunction(a), NativeFunction(b)) => match operator {
+                EqualEqual => Boolean(Rc::ptr_eq(a, b)),
+                BangEqual => Boolean(!Rc::ptr_eq(a, b)),
+                _ => unsupported()?,
+            },
+            (LoxFunction(a), LoxFunction(b)) => match operator {
+                EqualEqual => Boolean(a == b),
+                BangEqual => Boolean(a != b),
+                _ => unsupported()?,
+            },
+            // Guaranteed to be of different types
+            _ => match operator {
+                EqualEqual => Boolean(false),
+                BangEqual => Boolean(true),
+                _ => unsupported()?,
+            },
         };
 
         Ok(WithSpan { span, value })

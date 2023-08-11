@@ -1,7 +1,5 @@
 //! This module lets the [`Parser`] parse statements.
 
-use std::fmt;
-
 use super::{ParseResult, Parser};
 use crate::{
     ast::{Expr, SpanStmt, Stmt},
@@ -9,10 +7,14 @@ use crate::{
     span::{Span, WithSpan},
     tokens::{Token, TokenType},
 };
+use std::fmt;
 
+/// The type of function declaration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FunDeclKind {
+    /// A free function.
     Function,
+    // A method in a class.
     //Method
 }
 
@@ -393,7 +395,7 @@ impl<'s> Parser<'s> {
             "Expected ';' after for loop condition".to_string(),
         )?;
 
-        let increment = if !self.check(TokenType::Semicolon) {
+        let increment = if !self.check(TokenType::RightParen) {
             let expr = self.parse_expression()?;
             span = span.union(&expr.span);
             Some(expr)

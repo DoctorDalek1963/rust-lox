@@ -1,0 +1,5 @@
+ERROR: Invalid assignment target
+ --> 2:1
+  |
+2 | (a) = "value"; // Error at '=': Invalid assignment target.
+  | ^---^

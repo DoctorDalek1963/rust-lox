@@ -1,0 +1,5 @@
+ERROR: Undefined variable name 'notDefined'
+ --> 2:9
+  |
+2 |   print notDefined;  // expect runtime error: Undefined variable 'notDefined'.
+  |         ^--------^

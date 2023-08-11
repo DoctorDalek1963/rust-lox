@@ -1,0 +1,5 @@
+ERROR: Unsupported operation '/' between types 'string' and 'number'
+ --> 1:1
+  |
+1 | "1" / 1; // expect runtime error: Operands must be numbers.
+  | ^-----^

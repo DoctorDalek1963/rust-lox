@@ -1,0 +1,5 @@
+ERROR: Undefined variable name 'unknown'
+ --> 1:1
+  |
+1 | unknown = "what"; // expect runtime error: Undefined variable 'unknown'.
+  | ^--------------^

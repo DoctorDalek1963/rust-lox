@@ -1,0 +1,5 @@
+ERROR: at 'fun': Expected expression, got Fun
+ --> 2:14
+  |
+2 | while (true) fun foo() {}
+  |              ^-^

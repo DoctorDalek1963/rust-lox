@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+bat "$1"
+/home/dyson/repos/rust-lox/target/release/rlox-tw "$1" 2>&1 | sed -r "s/\x1B\[(([0-9]+)(;[0-9]+)*)?[m,K,H,f,J]//g" - | tee /tmp/banana
+cat /tmp/banana | xclip -selection c

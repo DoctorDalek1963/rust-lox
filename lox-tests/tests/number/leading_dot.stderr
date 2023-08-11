@@ -1,0 +1,5 @@
+ERROR: at '.': Expected expression, got Dot
+ --> 2:1
+  |
+2 | .123;
+  | ^

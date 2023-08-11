@@ -1,0 +1,5 @@
+ERROR: at 'fun': Expected expression, got Fun
+ --> 2:10
+  |
+2 | for (;;) fun foo() {}
+  |          ^-^

@@ -1,0 +1,5 @@
+ERROR: Division by 0
+ --> 1:11
+  |
+1 | var num = 0 / 0;
+  |           ^---^

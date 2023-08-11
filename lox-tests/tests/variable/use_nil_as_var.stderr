@@ -1,0 +1,5 @@
+ERROR: Expected variable name after 'var' keyword
+ --> 2:1
+  |
+2 | var nil = "value";
+  | ^-----^

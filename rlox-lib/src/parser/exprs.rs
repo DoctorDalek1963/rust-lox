@@ -370,7 +370,7 @@ impl<'s> Parser<'s> {
             Ok(WithSpan { span, value })
         } else {
             let token = *self.peek().unwrap_or_else(|| self.previous().unwrap());
-            let message = format!("Expected primary token, got {:?}", token.token_type);
+            let message = format!("Expected expression, got {:?}", token.token_type);
             Err(ParseError {
                 token,
                 previous_span: None,

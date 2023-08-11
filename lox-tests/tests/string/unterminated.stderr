@@ -1,0 +1,5 @@
+ERROR: Unterminated string literal
+ --> 2:1
+  |
+2 | "this string has no close quote
+  | ^-----------------------------^

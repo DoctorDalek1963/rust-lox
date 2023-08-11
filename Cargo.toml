@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rlox-lib", "rlox-tw"]
+members = ["rlox-lib", "rlox-tw", "test-harness"]
 
 [workspace.package]
 authors = ["Dyson Dyson <dyson.dyson@icloud.com>"]
@@ -11,6 +11,7 @@ license = "GPL-3.0"
 
 [workspace.dependencies]
 color-eyre = "0.6.2"
+clap = { version = "4.3.21", features = ["derive"] }
 crossterm = "0.26.1"
 home = "0.5.5"
 lazy_static = "1.4.0"

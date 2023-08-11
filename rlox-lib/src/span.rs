@@ -96,7 +96,7 @@ impl LineOffsets {
 
         for (i, val) in data.chars().enumerate() {
             if val == '\n' {
-                offsets.push(i);
+                offsets.push(i + 1);
             }
         }
 
@@ -108,7 +108,10 @@ impl LineOffsets {
 
     /// Get the line number and index of the previous newline for the given offset.
     pub fn line_and_newline_offset(&self, offset: usize) -> (usize, usize) {
-        assert!(offset <= self.len);
+        assert!(
+            offset <= self.len,
+            "Span offset must be within length of source code"
+        );
 
         match self.offsets.binary_search(&offset) {
             Ok(line_idx) => (line_idx + 1, self.offsets[line_idx]),
