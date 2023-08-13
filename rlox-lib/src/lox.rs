@@ -64,7 +64,12 @@ impl<T: Interpreter> LoxInterpreter<T> {
 
     /// Read the file and run the contents.
     pub fn run_file(&mut self, path: impl AsRef<Path>) -> io::Result<()> {
-        self.run_code(&fs::read_to_string(path)?);
+        let code = fs::read_to_string(path)?;
+
+        *SOURCE_CODE.write().unwrap() = code.clone();
+        *LINE_OFFSETS.write().unwrap() = LineOffsets::new(&code);
+
+        self.run_code(&code);
 
         if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
             //eprintln!("TODO: Report error properly and return Err()");
@@ -95,6 +100,13 @@ impl<T: Interpreter> LoxInterpreter<T> {
                         prompt.save_history(history_file)?;
                     }
                     line.push('\n');
+
+                    let old_code_width = SOURCE_CODE.read().unwrap().len();
+                    SOURCE_CODE.write().unwrap().push_str(&line);
+                    *LINE_OFFSETS.write().unwrap() = LineOffsets::new(&SOURCE_CODE.read().unwrap());
+
+                    let line = format!("{:old_code_width$}{line}", "");
+
                     self.run_code(&line);
 
                     if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
@@ -114,9 +126,6 @@ impl<T: Interpreter> LoxInterpreter<T> {
     #[instrument(skip_all)]
     fn run_code(&mut self, code: &str) {
         debug!(?code);
-
-        *SOURCE_CODE.write().unwrap() = code.to_string();
-        *LINE_OFFSETS.write().unwrap() = LineOffsets::new(code);
 
         let tokens = Scanner::scan_tokens(code);
 
