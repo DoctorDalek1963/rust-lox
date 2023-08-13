@@ -1,0 +1,5 @@
+WARNING: Local function 'foo' is never used
+ --> 8:5
+  |
+8 |     fun foo() { a; }
+  |     ^-------^

@@ -1,0 +1,11 @@
+WARNING: Local function 'h' is never used
+  --> 53:5
+   |
+53 |     fun h() {
+   |     ^-----^
+
+WARNING: Local function 'g' is never used
+  --> 26:3
+   |
+26 |   fun g() {
+   |   ^-----^

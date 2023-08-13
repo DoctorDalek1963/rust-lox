@@ -1,9 +1,9 @@
 //! This module provides the [`Span`], [`WithSpan`], and [`LineOffsets`] types.
 
-use std::{cmp, fmt, ops::Deref};
+use std::{cmp, fmt, hash::Hash, ops::Deref};
 
 /// A section of source code, measured as indices into source code.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Span {
     /// The index of the start of the span.
     pub start: usize,
@@ -18,6 +18,18 @@ impl Span {
         Self {
             start: cmp::min(self.start, other.start),
             end: cmp::max(self.end, other.end),
+        }
+    }
+
+    pub fn between(left: &Self, right: &Self) -> Self {
+        assert!(
+            left.start <= right.end,
+            "It doesn't make sense to get the span between left ({left:?}) and right ({right:?})"
+        );
+
+        Self {
+            start: left.start,
+            end: right.end,
         }
     }
 }
@@ -58,6 +70,13 @@ impl<T: PartialEq> PartialEq for WithSpan<T> {
 }
 
 impl<T: Eq> Eq for WithSpan<T> {}
+
+impl<T: Hash> Hash for WithSpan<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.span.hash(state);
+        self.value.hash(state);
+    }
+}
 
 impl<T> From<WithSpan<T>> for Span {
     fn from(value: WithSpan<T>) -> Self {
@@ -110,7 +129,7 @@ impl LineOffsets {
     pub fn line_and_newline_offset(&self, offset: usize) -> (usize, usize) {
         assert!(
             offset <= self.len,
-            "Span offset must be within length of source code"
+            "Span offset must be within length of source code: offset={offset}"
         );
 
         match self.offsets.binary_search(&offset) {

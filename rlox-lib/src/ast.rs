@@ -99,7 +99,7 @@ pub enum Expr {
     Logical(Box<SpanExpr>, WithSpan<LogicalOperator>, Box<SpanExpr>),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
     Variable(String),
-    Assign(String, Box<SpanExpr>),
+    Assign(WithSpan<String>, Box<SpanExpr>),
 }
 
 /// An [`Stmt`] wrapped in [`WithSpan`].
@@ -110,7 +110,7 @@ pub type SpanStmt = WithSpan<Stmt>;
 #[allow(clippy::missing_docs_in_private_items)]
 pub enum Stmt {
     VarDecl(WithSpan<String>, Option<SpanExpr>),
-    FunDecl(WithSpan<String>, Vec<WithSpan<String>>, Vec<SpanStmt>),
+    FunDecl(WithSpan<String>, Vec<WithSpan<String>>, Span, Vec<SpanStmt>),
     Expression(SpanExpr),
     If(SpanExpr, Box<SpanStmt>, Option<Box<SpanStmt>>),
     Print(SpanExpr),

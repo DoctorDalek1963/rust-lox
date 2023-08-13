@@ -1,6 +1,10 @@
 //! This module provides [`Environment`].
 
-use crate::{interpreter::RuntimeError, object::LoxObject, span::Span};
+use crate::{
+    interpreter::RuntimeError,
+    object::LoxObject,
+    span::{Span, WithSpan},
+};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// The environment of defined values in the current interpreter session.
@@ -33,7 +37,7 @@ impl Environment {
         self.values.insert(name, value);
     }
 
-    /// Re-assign an already existing variable. Returns a [`RuntimeError`] if the name is undefined.
+    /// Re-assign an already existing name. Returns a [`RuntimeError`] if the name is undefined.
     pub fn assign(&mut self, name: &str, value: LoxObject, span: Span) -> Result<(), RuntimeError> {
         if let Some(current) = self.values.get_mut(name) {
             *current = value;
@@ -48,17 +52,74 @@ impl Environment {
         }
     }
 
-    /// Get the value of the given variable, returning a [`RuntimeError`] if the name is undefined.
-    pub fn get(&self, name: &str, span: Span) -> Result<LoxObject, RuntimeError> {
-        if let Some(value) = self.values.get(name) {
+    /// Re-assign an already existing name in the environment at the given depth above this one.
+    pub fn assign_at_depth(
+        env: &Rc<RefCell<Environment>>,
+        depth: usize,
+        name: &WithSpan<String>,
+        value: LoxObject,
+    ) {
+        let env = Environment::ancestor(env, depth).expect(&format!(
+            "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+            name.value, name.span
+        ));
+        *env.borrow_mut()
+            .values
+            .get_mut(&name.value)
+            .expect(&format!(
+                "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
+                name.value, name.span
+            )) = value;
+    }
+
+    /// Get the value of the given name, returning a [`RuntimeError`] if the name is undefined.
+    pub fn get(&self, name: &WithSpan<String>) -> Result<LoxObject, RuntimeError> {
+        if let Some(value) = self.values.get(&name.value) {
             Ok(value.clone())
         } else if let Some(env) = &self.enclosing {
-            env.borrow().get(name, span).clone()
+            env.borrow().get(name).clone()
         } else {
             Err(RuntimeError {
-                span,
-                message: format!("Undefined variable name '{name}'"),
+                span: name.span,
+                message: format!("Undefined variable name '{}'", name.value),
             })
+        }
+    }
+
+    /// Get the value of the given name in the environment at the given depth above this one.
+    pub fn get_at_depth(
+        env: &Rc<RefCell<Environment>>,
+        depth: usize,
+        name: &WithSpan<String>,
+    ) -> LoxObject {
+        Environment::ancestor(env, depth)
+            .expect(&format!(
+                "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+                name.value, name.span
+            ))
+            .borrow()
+            .values
+            .get(&name.value)
+            .expect(&format!(
+                "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
+                name.value, name.span
+            ))
+            .clone()
+    }
+
+    /// Get the ancestor of this environment at the given distance.
+    fn ancestor(
+        env: &Rc<RefCell<Environment>>,
+        distance: usize,
+    ) -> Option<Rc<RefCell<Environment>>> {
+        if distance == 0 {
+            Some(Rc::clone(env))
+        } else {
+            let enclosing = match &env.borrow().enclosing {
+                Some(x) => Rc::clone(x),
+                None => return None,
+            };
+            Self::ancestor(&enclosing, distance - 1)
         }
     }
 }

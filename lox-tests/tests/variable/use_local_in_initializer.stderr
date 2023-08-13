@@ -1,1 +1,5 @@
-TODO: Fix error message
+ERROR: Cannot read local variable in its own initializer
+ --> 3:11
+  |
+3 |   var a = a; // Error at 'a': Can't read local variable in its own initializer.
+  |           ^

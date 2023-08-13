@@ -1,0 +1,5 @@
+WARNING: Local variable 'i' is never used
+ --> 2:3
+  |
+2 |   var i = "before";
+  |   ^---------------^

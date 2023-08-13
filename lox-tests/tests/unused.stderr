@@ -1,0 +1,23 @@
+WARNING: Local function 'g' is never used
+ --> 7:3
+  |
+7 |   fun g() {
+  |   ^-----^
+
+WARNING: Parameter 'x' is never used
+ --> 1:7
+  |
+1 | fun f(x) {
+  |       ^
+
+WARNING: Local variable 'b' is never used
+ --> 3:3
+  |
+3 |   var b = 2;
+  |   ^--------^
+
+WARNING: Local variable 'c' is never used
+ --> 4:3
+  |
+4 |   var c;
+  |   ^----^

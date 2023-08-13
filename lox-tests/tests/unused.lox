@@ -1,0 +1,12 @@
+fun f(x) {
+  var a = 1;
+  var b = 2;
+  var c;
+  print a;
+
+  fun g() {
+    print "do nothing";
+  }
+}
+
+f(nil);
