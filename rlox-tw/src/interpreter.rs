@@ -170,6 +170,7 @@ impl TwInterpreter {
         Ok(())
     }
 
+    /// Execute a return statement.
     fn execute_return(&mut self, keyword_span: &Span, expr: &Option<SpanExpr>) -> Result<()> {
         let value = if let Some(expr) = expr {
             self.evaluate_expression(expr)?

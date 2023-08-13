@@ -42,6 +42,18 @@ pub struct LoxInterpreter<T: Interpreter> {
     interpreter: T,
 }
 
+/// An error that can be returned from [`LoxInterpreter::run_file`].
+#[derive(Debug, Error)]
+pub enum RunFileError {
+    /// An error from running the user's Lox code.
+    #[error("An error occured while running the Lox code")]
+    LoxError,
+
+    /// A standard I/O error.
+    #[error("I/O error: `{0:?}`")]
+    Io(#[from] io::Error),
+}
+
 /// An error that can be returned from [`LoxInterpreter::run_prompt`].
 #[derive(Debug, Error)]
 pub enum PromptError {
@@ -63,7 +75,7 @@ impl<T: Interpreter> LoxInterpreter<T> {
     }
 
     /// Read the file and run the contents.
-    pub fn run_file(&mut self, path: impl AsRef<Path>) -> io::Result<()> {
+    pub fn run_file(&mut self, path: impl AsRef<Path>) -> Result<(), RunFileError> {
         let code = fs::read_to_string(path)?;
 
         *SOURCE_CODE.write().unwrap() = code.clone();
@@ -71,11 +83,13 @@ impl<T: Interpreter> LoxInterpreter<T> {
 
         self.run_code(&code);
 
-        if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
-            //eprintln!("TODO: Report error properly and return Err()");
+        if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed)
+            || HAD_RUNTIME_ERROR.load(Ordering::Relaxed)
+        {
+            Err(RunFileError::LoxError)
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     /// Read code from an interactive prompt and run it.
@@ -108,10 +122,6 @@ impl<T: Interpreter> LoxInterpreter<T> {
                     let line = format!("{:old_code_width$}{line}", "");
 
                     self.run_code(&line);
-
-                    if HAD_NON_RUNTIME_ERROR.load(Ordering::Relaxed) {
-                        print_error_message(None, "Bad input, please try again");
-                    }
                 }
                 Err(ReadlineError::Eof | ReadlineError::Interrupted) => return Ok(()),
                 Err(ReadlineError::Io(e)) => return Err(e)?,

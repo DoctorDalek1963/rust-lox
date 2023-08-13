@@ -26,6 +26,17 @@ impl fmt::Display for ResolveError {
 /// A result wrapping a [`ResolveError`].
 type Result<T = (), E = ResolveError> = ::std::result::Result<T, E>;
 
+/// An enum to determine if the [`Resolver`] is currently in a function. Used to detect badly
+/// placed return statements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum FunctionType {
+    /// Not in a function.
+    None,
+
+    /// In a free function.
+    Function,
+}
+
 /// A type to handle resolving and binding names before runtime.
 #[derive(Clone, Debug)]
 pub struct Resolver {
@@ -41,6 +52,9 @@ pub struct Resolver {
     /// A map from a name to its local environment depth. When resolving that name, go up that many
     /// environments in the chain.
     locals: HashMap<WithSpan<String>, usize>,
+
+    /// The type of function that we're currently inside.
+    current_function: FunctionType,
 }
 
 impl Resolver {
@@ -60,6 +74,7 @@ impl Resolver {
         Self {
             scopes: Vec::new(),
             locals: HashMap::new(),
+            current_function: FunctionType::None,
         }
     }
 
@@ -81,16 +96,16 @@ impl Resolver {
                 self.end_scope();
             }
             Stmt::VarDecl(name, initializer) => {
-                self.declare_name(name.value.clone());
+                self.declare_name(name.clone())?;
                 if let Some(initializer) = initializer {
                     self.resolve_expr(initializer)?;
                 }
                 self.define_name(&name);
             }
             Stmt::FunDecl(name, params, body) => {
-                self.declare_name(name.value.clone());
+                self.declare_name(name.clone())?;
                 self.define_name(&name.value);
-                self.resolve_function(params, body)?;
+                self.resolve_function(params, body, FunctionType::Function)?;
             }
             Stmt::Expression(expr) => self.resolve_expr(expr)?,
             Stmt::If(condition, then_branch, else_branch) => {
@@ -102,6 +117,13 @@ impl Resolver {
             }
             Stmt::Print(expr) => self.resolve_expr(expr)?,
             Stmt::Return(_, expr) => {
+                if self.current_function == FunctionType::None {
+                    return Err(ResolveError {
+                        message: "Cannot return outside of a function".to_string(),
+                        span: stmt.span,
+                    });
+                }
+
                 if let Some(expr) = expr {
                     self.resolve_expr(expr)?;
                 }
@@ -167,10 +189,20 @@ impl Resolver {
     }
 
     /// Declare the given name to exist in the current scope, but not yet be defined.
-    fn declare_name(&mut self, name: String) {
+    fn declare_name(&mut self, name: WithSpan<String>) -> Result {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, false);
+            if scope.contains_key(&name.value) {
+                return Err(ResolveError {
+                    message: format!(
+                        "Already declared variable '{}' in this local scope",
+                        &name.value
+                    ),
+                    span: name.span,
+                });
+            }
+            scope.insert(name.value, false);
         }
+        Ok(())
     }
 
     /// Define the given name in the current scope, setting its value to true.
@@ -183,7 +215,8 @@ impl Resolver {
         }
     }
 
-    // TODO: Work this out and document it.
+    /// Resolve a name in a local scope by traversing up the scope tree to find the definition of
+    /// the name, and add it [`self.locals`](Self.locals).
     fn resolve_local(&mut self, name: WithSpan<String>) {
         for i in (0..self.scopes.len()).rev() {
             if self
@@ -199,16 +232,25 @@ impl Resolver {
     }
 
     /// Resolve a function declaration.
-    fn resolve_function(&mut self, params: &[WithSpan<String>], body: &[SpanStmt]) -> Result {
+    fn resolve_function(
+        &mut self,
+        params: &[WithSpan<String>],
+        body: &[SpanStmt],
+        function_type: FunctionType,
+    ) -> Result {
+        let enclosing_function = self.current_function;
+        self.current_function = function_type;
+
         self.begin_scope();
 
         for param in params {
-            self.declare_name(param.value.clone());
-            self.define_name(&param.value)
+            self.declare_name(param.clone())?;
+            self.define_name(&param.value);
         }
         self.resolve_stmts(body)?;
 
         self.end_scope();
+        self.current_function = enclosing_function;
         Ok(())
     }
 }
