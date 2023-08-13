@@ -149,6 +149,16 @@ impl<T: Interpreter> LoxInterpreter<T> {
     }
 }
 
+/// The level of severity in an error/warning message.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SeverityLevel {
+    /// A fatal error.
+    Error,
+
+    /// A non-fatal warning.
+    Warning,
+}
+
 /// Report an error at the given token with the given message.
 pub fn report_token_error(token: &Token<'_>, message: &str) {
     let string = if token.token_type == TokenType::Eof {
@@ -157,30 +167,40 @@ pub fn report_token_error(token: &Token<'_>, message: &str) {
         format!("at '{}': {message}", token.lexeme)
     };
 
-    print_error_message(Some(token.span), &string);
+    print_error_message(Some(token.span), &string, SeverityLevel::Error);
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
 /// Report an error before runtime.
 pub fn report_non_runtime_error(span: Span, message: &str) {
-    print_error_message(Some(span), message);
+    print_error_message(Some(span), message, SeverityLevel::Error);
     HAD_NON_RUNTIME_ERROR.store(true, Ordering::Relaxed);
 }
 
 /// Report an error at runtime.
 pub fn report_runtime_error(span: Span, message: &str) {
-    print_error_message(Some(span), message);
+    print_error_message(Some(span), message, SeverityLevel::Error);
     HAD_RUNTIME_ERROR.store(true, Ordering::Relaxed);
+}
+
+/// Report a non-fatal warning.
+pub fn report_warning(span: Span, message: &str) {
+    print_error_message(Some(span), message, SeverityLevel::Warning);
 }
 
 /// Print the given error message.
 #[instrument(skip_all)]
-fn print_error_message(span: Option<Span>, message: &str) {
+fn print_error_message(span: Option<Span>, message: &str, level: SeverityLevel) {
     use crossterm::{
         execute,
         style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
     };
     use std::io::stderr;
+
+    let (highlight_color, severity_name) = match level {
+        SeverityLevel::Error => (Color::Red, "ERROR"),
+        SeverityLevel::Warning => (Color::Yellow, "WARNING"),
+    };
 
     let message = if let Some(span) = span {
         let (start_line, start_nl) = LINE_OFFSETS
@@ -250,7 +270,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
             if start_col == end_col {
                 message.push_str(&format!(
                     "{}{}{:space_width$}^{}{}",
-                    SetForegroundColor(Color::Red),
+                    SetForegroundColor(highlight_color),
                     Attribute::Bold,
                     "",
                     ResetColor,
@@ -260,7 +280,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
             } else {
                 message.push_str(&format!(
                     "{}{}{:space_width$}^{:-<dash_width$}^{}{}",
-                    SetForegroundColor(Color::Red),
+                    SetForegroundColor(highlight_color),
                     Attribute::Bold,
                     "",
                     "",
@@ -302,7 +322,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 if line == start_line {
                     message.push_str(&format!(
                         "{}{}{:space_width$}^{:-<dash_width$}{}{}",
-                        SetForegroundColor(Color::Red),
+                        SetForegroundColor(highlight_color),
                         Attribute::Bold,
                         "",
                         "",
@@ -314,7 +334,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 } else if line == end_line {
                     message.push_str(&format!(
                         "{}{}{:-<dash_width$}^{}{}",
-                        SetForegroundColor(Color::Red),
+                        SetForegroundColor(highlight_color),
                         Attribute::Bold,
                         "",
                         ResetColor,
@@ -324,7 +344,7 @@ fn print_error_message(span: Option<Span>, message: &str) {
                 } else {
                     message.push_str(&format!(
                         "{}{}{:-<dash_width$}{}{}",
-                        SetForegroundColor(Color::Red),
+                        SetForegroundColor(highlight_color),
                         Attribute::Bold,
                         "",
                         ResetColor,
@@ -345,9 +365,9 @@ fn print_error_message(span: Option<Span>, message: &str) {
 
     execute!(
         stderr(),
-        SetForegroundColor(Color::Red),
+        SetForegroundColor(highlight_color),
         SetAttribute(Attribute::Bold),
-        Print("ERROR"),
+        Print(severity_name),
         ResetColor,
         SetAttribute(Attribute::Reset),
         Print(message)

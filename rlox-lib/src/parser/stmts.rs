@@ -78,15 +78,12 @@ impl<'s> Parser<'s> {
             span = span.union(&prev);
         }
 
-        span = span.union(
-            &self
-                .consume(
-                    TokenType::LeftParen,
-                    Some(span),
-                    format!("Expected '(' after {kind} name"),
-                )?
-                .span,
-        );
+        self.consume(
+            TokenType::LeftParen,
+            Some(span),
+            format!("Expected '(' after {kind} name"),
+        )?
+        .span;
 
         let mut parameters: Vec<WithSpan<String>> = Vec::new();
         let mut reported_max_params_error = false;
@@ -120,8 +117,6 @@ impl<'s> Parser<'s> {
                     "Expected parameter name".to_string(),
                 )?;
 
-                span = span.union(&token_span);
-
                 parameters.push(WithSpan {
                     span: token_span,
                     value: lexeme.to_string(),
@@ -133,32 +128,27 @@ impl<'s> Parser<'s> {
             }
         }
 
-        span = span.union(
-            &self
-                .consume(
-                    TokenType::RightParen,
-                    Some(span),
-                    format!("Expected ')' after {kind} parameters"),
-                )?
-                .span,
-        );
+        let right_paren = self
+            .consume(
+                TokenType::RightParen,
+                Some(span),
+                format!("Expected ')' after {kind} parameters"),
+            )?
+            .span;
 
-        span = span.union(
-            &self
-                .consume(
-                    TokenType::LeftBrace,
-                    Some(span),
-                    format!("Expected '{{' before {kind} body"),
-                )?
-                .span,
-        );
+        self.consume(
+            TokenType::LeftBrace,
+            Some(span),
+            format!("Expected '{{' before {kind} body"),
+        )?
+        .span;
 
         let stmts = self.parse_block()?;
         span = span.union(&stmts.span);
 
         Ok(WithSpan {
             span,
-            value: Stmt::FunDecl(name, parameters, stmts.value),
+            value: Stmt::FunDecl(name, parameters, right_paren, stmts.value),
         })
     }
 
@@ -177,16 +167,20 @@ impl<'s> Parser<'s> {
             None
         };
 
-        let span = match expr {
+        let mut span = match expr {
             Some(WithSpan { span, value: _ }) => var_keyword_span.union(&span),
             _ => var_keyword_span,
         };
 
-        self.consume(
-            TokenType::Semicolon,
-            Some(span),
-            "Expected ';' after variable declaration".to_string(),
-        )?;
+        span = span.union(
+            &self
+                .consume(
+                    TokenType::Semicolon,
+                    Some(span),
+                    "Expected ';' after variable declaration".to_string(),
+                )?
+                .span,
+        );
 
         let value = Stmt::VarDecl(
             WithSpan {

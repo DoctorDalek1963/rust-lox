@@ -103,7 +103,9 @@ impl TwInterpreter {
     fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
         match &stmt.value {
             Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
-            Stmt::FunDecl(name, parameters, body) => self.execute_fun_decl(name, parameters, body),
+            Stmt::FunDecl(name, parameters, _, body) => {
+                self.execute_fun_decl(name, parameters, body)
+            }
             Stmt::Expression(expr) => {
                 self.evaluate_expression(expr)?;
             }

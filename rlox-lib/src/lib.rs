@@ -42,7 +42,10 @@ pub fn run_interpreter<T: Interpreter>() -> Result<()> {
     let mut interpreter = lox::LoxInterpreter::<T>::new();
 
     match args().nth(1) {
-        Some(path) => interpreter.run_file(path)?,
+        Some(path) => match interpreter.run_file(path) {
+            Ok(()) | Err(lox::RunFileError::LoxError) => (),
+            Err(lox::RunFileError::Io(error)) => Err(error)?,
+        },
         None => interpreter.run_prompt()?,
     }
 

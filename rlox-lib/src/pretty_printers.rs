@@ -27,7 +27,7 @@ impl ParenPrinter {
                     String::new()
                 }
             ),
-            Stmt::FunDecl(name, parameters, body) => format!(
+            Stmt::FunDecl(name, parameters, _, body) => format!(
                 "fun {}({}) {{\n{}\n}}",
                 name.value,
                 parameters

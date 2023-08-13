@@ -4,7 +4,7 @@ use rlox_lib::{
     ast::{Expr, SpanExpr, SpanStmt, Stmt},
     span::{Span, WithSpan},
 };
-use std::{collections::HashMap, fmt};
+use std::{cmp::Ordering, collections::HashMap, fmt};
 use thiserror::Error;
 
 /// An error that occurred whilst resolving.
@@ -37,6 +37,42 @@ enum FunctionType {
     Function,
 }
 
+/// An enum to distinguish different things that a name could refer to. Used for warning reporting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ScopeValueType {
+    Variable,
+    Function,
+    Parameter,
+}
+
+/// A value for the [`scopes`](Resolver.scopes) map.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ScopeValue {
+    /// Where was the name declared?
+    declaration: Span,
+
+    /// What is the type of the name?
+    value_type: ScopeValueType,
+
+    /// Has the name been defined?
+    defined: bool,
+
+    /// Has the name been used?
+    used: bool,
+}
+
+impl ScopeValue {
+    /// Create a new value for a name that's just been declared.
+    fn new(declaration: Span, value_type: ScopeValueType) -> Self {
+        Self {
+            declaration,
+            value_type,
+            defined: false,
+            used: false,
+        }
+    }
+}
+
 /// A type to handle resolving and binding names before runtime.
 #[derive(Clone, Debug)]
 pub struct Resolver {
@@ -45,9 +81,10 @@ pub struct Resolver {
     /// The global scope is not included and global variables are never
     /// [declared](Self::declare_name) or [defined](Self::define_name).
     ///
-    /// The hashmap maps variable names to whether they've been defined. When a variable gets
-    /// declared, its name is added here, and when it is defined, its value is set to true.
-    scopes: Vec<HashMap<String, bool>>,
+    /// The hashmap maps variable names to whether they've been defined and/or used. When a
+    /// variable gets declared, its name is added here, and when it is defined or used, the
+    /// appropriate value is set to true.
+    scopes: Vec<HashMap<String, ScopeValue>>,
 
     /// A map from a name to its local environment depth. When resolving that name, go up that many
     /// environments in the chain.
@@ -96,14 +133,18 @@ impl Resolver {
                 self.end_scope();
             }
             Stmt::VarDecl(name, initializer) => {
-                self.declare_name(name.clone())?;
+                self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
                 if let Some(initializer) = initializer {
                     self.resolve_expr(initializer)?;
                 }
                 self.define_name(&name);
             }
-            Stmt::FunDecl(name, params, body) => {
-                self.declare_name(name.clone())?;
+            Stmt::FunDecl(name, params, right_paren, body) => {
+                self.declare_name(
+                    name.clone(),
+                    Span::between(&stmt.span, &right_paren),
+                    ScopeValueType::Function,
+                )?;
                 self.define_name(&name.value);
                 self.resolve_function(params, body, FunctionType::Function)?;
             }
@@ -141,11 +182,9 @@ impl Resolver {
     fn resolve_expr(&mut self, expr: &SpanExpr) -> Result {
         match &expr.value {
             Expr::Variable(name) => {
-                if self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.get(name).is_some_and(|value| *value == false))
-                {
+                if self.scopes.last().is_some_and(|scope| {
+                    scope.get(name).is_some_and(|value| value.defined == false)
+                }) {
                     return Err(ResolveError {
                         message: "Cannot read local variable in its own initializer".to_string(),
                         span: expr.span,
@@ -185,11 +224,18 @@ impl Resolver {
 
     /// End a local scope.
     fn end_scope(&mut self) {
-        self.scopes.pop();
+        if let Some(scope) = self.scopes.pop() {
+            report_warnings(scope);
+        }
     }
 
     /// Declare the given name to exist in the current scope, but not yet be defined.
-    fn declare_name(&mut self, name: WithSpan<String>) -> Result {
+    fn declare_name(
+        &mut self,
+        name: WithSpan<String>,
+        declaration: Span,
+        value_type: ScopeValueType,
+    ) -> Result {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name.value) {
                 return Err(ResolveError {
@@ -200,7 +246,7 @@ impl Resolver {
                     span: name.span,
                 });
             }
-            scope.insert(name.value, false);
+            scope.insert(name.value, ScopeValue::new(declaration, value_type));
         }
         Ok(())
     }
@@ -211,21 +257,17 @@ impl Resolver {
             let x = scope.get_mut(name).expect(
                 "We should only call define_name() after calling declare_name() with the same name",
             );
-            *x = true;
+            x.defined = true;
         }
     }
 
     /// Resolve a name in a local scope by traversing up the scope tree to find the definition of
     /// the name, and add it [`self.locals`](Self.locals).
     fn resolve_local(&mut self, name: WithSpan<String>) {
-        for i in (0..self.scopes.len()).rev() {
-            if self
-                .scopes
-                .get(i)
-                .expect("This index must be valid because of the for loop")
-                .contains_key(&name.value)
-            {
-                self.locals.insert(name, i);
+        for (idx, scope) in self.scopes.iter_mut().enumerate().rev() {
+            if let Some(scope_value) = scope.get_mut(&name.value) {
+                scope_value.used = true;
+                self.locals.insert(name, idx);
                 return;
             }
         }
@@ -244,7 +286,7 @@ impl Resolver {
         self.begin_scope();
 
         for param in params {
-            self.declare_name(param.clone())?;
+            self.declare_name(param.clone(), param.span, ScopeValueType::Parameter)?;
             self.define_name(&param.value);
         }
         self.resolve_stmts(body)?;
@@ -252,5 +294,51 @@ impl Resolver {
         self.end_scope();
         self.current_function = enclosing_function;
         Ok(())
+    }
+}
+
+/// Report warnings for unused names.
+fn report_warnings(scope: HashMap<String, ScopeValue>) {
+    let mut names: Vec<_> = scope
+        .into_iter()
+        .filter_map(
+            |(
+                name,
+                ScopeValue {
+                    declaration,
+                    value_type,
+                    defined: _,
+                    used,
+                },
+            )| { (!used).then_some((declaration, value_type, name)) },
+        )
+        .collect();
+
+    names.sort_by(|(_, l_type, l_name), (_, r_type, r_name)| {
+        use ScopeValueType::*;
+
+        match (l_type, r_type) {
+            (Function, Function) | (Parameter, Parameter) | (Variable, Variable) => {
+                l_name.cmp(r_name)
+            }
+            (Function, Parameter | Variable) => Ordering::Less,
+            (Parameter, Function) => Ordering::Greater,
+            (Parameter, Variable) => Ordering::Less,
+            (Variable, Parameter | Function) => Ordering::Greater,
+        }
+    });
+
+    for (span, value_type, name) in names {
+        rlox_lib::lox::report_warning(
+            span,
+            &format!(
+                "{} '{name}' is never used",
+                match value_type {
+                    ScopeValueType::Variable => "Local variable",
+                    ScopeValueType::Function => "Local function",
+                    ScopeValueType::Parameter => "Parameter",
+                }
+            ),
+        );
     }
 }
