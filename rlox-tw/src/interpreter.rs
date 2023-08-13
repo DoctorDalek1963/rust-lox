@@ -1,5 +1,6 @@
 //! This module provides [`TwInterpreter`].
 
+use crate::resolver::Resolver;
 use rlox_lib::{
     ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
     callable::{self, lox_function::LoxFunction, LoxCallable},
@@ -8,7 +9,7 @@ use rlox_lib::{
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{cell::RefCell, mem, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
 
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,6 +19,10 @@ pub struct TwInterpreter {
 
     /// The environment of defined values in the current interpreter session.
     current_env: Rc<RefCell<Environment>>,
+
+    /// A map from a name to its local environment depth. When resolving that name, go up that many
+    /// environments in the chain.
+    locals: HashMap<WithSpan<String>, usize>,
 }
 
 impl Interpreter for TwInterpreter {
@@ -42,6 +47,7 @@ impl Interpreter for TwInterpreter {
         Self {
             global_env: Rc::clone(&environment),
             current_env: environment,
+            locals: HashMap::new(),
         }
     }
 
@@ -50,7 +56,15 @@ impl Interpreter for TwInterpreter {
     }
 
     fn interpret(&mut self, stmts: &[SpanStmt]) {
-        if let Err(ErrorOrReturn::Error(e)) = self.execute_statements(stmts) {
+        match Resolver::get_locals_map(stmts) {
+            Ok(map) => self.locals.extend(dbg!(map)),
+            Err(e) => {
+                rlox_lib::lox::report_non_runtime_error(e.span, &e.message);
+                return;
+            }
+        };
+
+        if let Err(ErrorOrReturn::Error(e)) = dbg!(self.execute_statements(stmts)) {
             rlox_lib::lox::report_runtime_error(e.span, &e.message);
         }
     }
@@ -221,15 +235,38 @@ impl TwInterpreter {
             }
             Expr::Variable(name) => WithSpan {
                 span,
-                value: self.current_env.borrow().get(name, span)?.clone(),
+                value: self.look_up_name(&WithSpan {
+                    span,
+                    value: name.clone(),
+                })?,
             },
             Expr::Assign(name, expr) => {
                 let value = self.evaluate_expression(expr)?;
-                self.current_env
-                    .borrow_mut()
-                    .assign(name, value.value.clone(), span)?;
+
+                match self.locals.get(name) {
+                    Some(depth) => Environment::assign_at_depth(
+                        &self.current_env,
+                        *depth,
+                        name,
+                        value.value.clone(),
+                    )?,
+                    None => self
+                        .global_env
+                        .borrow_mut()
+                        .assign(name, value.value.clone(), span)?,
+                };
+
                 value
             }
+        })
+    }
+
+    /// Look up the name to resolve it in the [`locals`](Self.locals) map or in the global scope.
+    fn look_up_name(&self, name: &WithSpan<String>) -> Result<LoxObject> {
+        Ok(match self.locals.get(name) {
+            //Some(depth) => self.current_env.borrow().get_at_depth(depth, name)?,
+            Some(depth) => Environment::get_at_depth(&self.current_env, *depth, name)?,
+            None => self.global_env.borrow().get(name)?,
         })
     }
 

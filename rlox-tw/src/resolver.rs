@@ -1,0 +1,214 @@
+//! This module provides the [`Resolver`].
+
+use rlox_lib::{
+    ast::{Expr, SpanExpr, SpanStmt, Stmt},
+    span::{Span, WithSpan},
+};
+use std::{collections::HashMap, fmt};
+use thiserror::Error;
+
+/// An error that occurred whilst resolving.
+#[derive(Clone, Debug, PartialEq, Error)]
+pub struct ResolveError {
+    /// The error message.
+    pub message: String,
+
+    /// The span where the error occurred.
+    pub span: Span,
+}
+
+impl fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ResolveError({:?})", self.message)
+    }
+}
+
+/// A result wrapping a [`ResolveError`].
+type Result<T = (), E = ResolveError> = ::std::result::Result<T, E>;
+
+/// A type to handle resolving and binding names before runtime.
+#[derive(Clone, Debug)]
+pub struct Resolver {
+    /// A stack of local scopes.
+    ///
+    /// The global scope is not included and global variables are never
+    /// [declared](Self::declare_name) or [defined](Self::define_name).
+    ///
+    /// The hashmap maps variable names to whether they've been defined. When a variable gets
+    /// declared, its name is added here, and when it is defined, its value is set to true.
+    scopes: Vec<HashMap<String, bool>>,
+
+    /// A map from a name to its local environment depth. When resolving that name, go up that many
+    /// environments in the chain.
+    locals: HashMap<WithSpan<String>, usize>,
+}
+
+impl Resolver {
+    /// Resolve the given code and get the map of local names to their depths.
+    pub fn get_locals_map(
+        stmts: &[SpanStmt],
+    ) -> Result<HashMap<WithSpan<String>, usize>, ResolveError> {
+        let mut resolver = Self::new();
+        match resolver.resolve_stmts(stmts) {
+            Ok(()) => Ok(resolver.locals),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Create a new Resolver.
+    fn new() -> Self {
+        Self {
+            scopes: Vec::new(),
+            locals: HashMap::new(),
+        }
+    }
+
+    /// Resolve a list of statements.
+    fn resolve_stmts(&mut self, stmts: &[SpanStmt]) -> Result {
+        for stmt in stmts {
+            self.resolve_stmt(stmt)?;
+        }
+
+        Ok(())
+    }
+
+    /// Resolve a single statement.
+    fn resolve_stmt(&mut self, stmt: &SpanStmt) -> Result {
+        match &stmt.value {
+            Stmt::Block(body) => {
+                self.begin_scope();
+                self.resolve_stmts(body)?;
+                self.end_scope();
+            }
+            Stmt::VarDecl(name, initializer) => {
+                self.declare_name(name.value.clone());
+                if let Some(initializer) = initializer {
+                    self.resolve_expr(initializer)?;
+                }
+                self.define_name(&name);
+            }
+            Stmt::FunDecl(name, params, body) => {
+                self.declare_name(name.value.clone());
+                self.define_name(&name.value);
+                self.resolve_function(params, body)?;
+            }
+            Stmt::Expression(expr) => self.resolve_expr(expr)?,
+            Stmt::If(condition, then_branch, else_branch) => {
+                self.resolve_expr(condition)?;
+                self.resolve_stmt(then_branch)?;
+                if let Some(else_branch) = else_branch {
+                    self.resolve_stmt(else_branch)?;
+                }
+            }
+            Stmt::Print(expr) => self.resolve_expr(expr)?,
+            Stmt::Return(_, expr) => {
+                if let Some(expr) = expr {
+                    self.resolve_expr(expr)?;
+                }
+            }
+            Stmt::While(condition, body) => {
+                self.resolve_expr(condition)?;
+                self.resolve_stmt(body)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Resolve a single expression.
+    fn resolve_expr(&mut self, expr: &SpanExpr) -> Result {
+        match &expr.value {
+            Expr::Variable(name) => {
+                if self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.get(name).is_some_and(|value| *value == false))
+                {
+                    return Err(ResolveError {
+                        message: "Cannot read local variable in its own initializer".to_string(),
+                        span: expr.span,
+                    });
+                }
+
+                self.resolve_local(WithSpan {
+                    span: expr.span,
+                    value: name.clone(),
+                });
+            }
+            Expr::Assign(name, value) => {
+                self.resolve_expr(value)?;
+                self.resolve_local(name.clone());
+            }
+            Expr::Binary(left, _, right) | Expr::Logical(left, _, right) => {
+                self.resolve_expr(left)?;
+                self.resolve_expr(right)?;
+            }
+            Expr::Call(callee, arguments, _) => {
+                self.resolve_expr(callee)?;
+                for arg in arguments {
+                    self.resolve_expr(arg)?;
+                }
+            }
+            Expr::Grouping(expr) | Expr::Unary(_, expr) => self.resolve_expr(expr)?,
+            Expr::Nil | Expr::Boolean(_) | Expr::String(_) | Expr::Number(_) => (),
+        }
+
+        Ok(())
+    }
+
+    /// Begin a new local scope.
+    fn begin_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    /// End a local scope.
+    fn end_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    /// Declare the given name to exist in the current scope, but not yet be defined.
+    fn declare_name(&mut self, name: String) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, false);
+        }
+    }
+
+    /// Define the given name in the current scope, setting its value to true.
+    fn define_name(&mut self, name: &str) {
+        if let Some(scope) = self.scopes.last_mut() {
+            let x = scope.get_mut(name).expect(
+                "We should only call define_name() after calling declare_name() with the same name",
+            );
+            *x = true;
+        }
+    }
+
+    // TODO: Work this out and document it.
+    fn resolve_local(&mut self, name: WithSpan<String>) {
+        for i in (0..self.scopes.len()).rev() {
+            if self
+                .scopes
+                .get(i)
+                .expect("This index must be valid because of the for loop")
+                .contains_key(&name.value)
+            {
+                self.locals.insert(name, i);
+                return;
+            }
+        }
+    }
+
+    /// Resolve a function declaration.
+    fn resolve_function(&mut self, params: &[WithSpan<String>], body: &[SpanStmt]) -> Result {
+        self.begin_scope();
+
+        for param in params {
+            self.declare_name(param.value.clone());
+            self.define_name(&param.value)
+        }
+        self.resolve_stmts(body)?;
+
+        self.end_scope();
+        Ok(())
+    }
+}

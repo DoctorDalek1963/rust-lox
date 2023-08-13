@@ -23,13 +23,19 @@ impl<'s> Parser<'s> {
             let r_value = self.parse_assignment()?;
 
             if let WithSpan {
-                span: _,
+                span: var_name_span,
                 value: Expr::Variable(name),
             } = expr
             {
                 return Ok(WithSpan {
                     span: expr.span.union(&r_value.span),
-                    value: Expr::Assign(name, Box::new(r_value)),
+                    value: Expr::Assign(
+                        WithSpan {
+                            span: var_name_span,
+                            value: name,
+                        },
+                        Box::new(r_value),
+                    ),
                 });
             } else {
                 ParseError {

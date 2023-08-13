@@ -106,7 +106,7 @@ impl ParenPrinter {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
             Expr::Variable(name) => name.to_string(),
-            Expr::Assign(name, expr) => format!("{name} = {}", Self::print_expr(expr)),
+            Expr::Assign(name, expr) => format!("{} = {}", name.value, Self::print_expr(expr)),
         }
     }
 }

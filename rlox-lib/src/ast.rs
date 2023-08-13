@@ -99,7 +99,7 @@ pub enum Expr {
     Logical(Box<SpanExpr>, WithSpan<LogicalOperator>, Box<SpanExpr>),
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
     Variable(String),
-    Assign(String, Box<SpanExpr>),
+    Assign(WithSpan<String>, Box<SpanExpr>),
 }
 
 /// An [`Stmt`] wrapped in [`WithSpan`].

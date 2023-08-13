@@ -15,6 +15,7 @@ pub struct RuntimeError {
 }
 
 /// A runtime error has occured or we need to return from a function call.
+#[derive(Clone, Debug, PartialEq)]
 pub enum ErrorOrReturn {
     /// A [`RuntimeError`] has occured.
     Error(RuntimeError),
@@ -29,7 +30,7 @@ impl From<RuntimeError> for ErrorOrReturn {
     }
 }
 
-/// A result wrapping a [`RuntimeError`].
+/// A result wrapping an [`ErrorOrReturn`].
 pub type Result<T, E = ErrorOrReturn> = ::std::result::Result<T, E>;
 
 impl fmt::Display for RuntimeError {
