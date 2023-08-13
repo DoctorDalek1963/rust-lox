@@ -57,14 +57,14 @@ impl Interpreter for TwInterpreter {
 
     fn interpret(&mut self, stmts: &[SpanStmt]) {
         match Resolver::get_locals_map(stmts) {
-            Ok(map) => self.locals.extend(dbg!(map)),
+            Ok(map) => self.locals.extend(map),
             Err(e) => {
                 rlox_lib::lox::report_non_runtime_error(e.span, &e.message);
                 return;
             }
         };
 
-        if let Err(ErrorOrReturn::Error(e)) = dbg!(self.execute_statements(stmts)) {
+        if let Err(ErrorOrReturn::Error(e)) = self.execute_statements(stmts) {
             rlox_lib::lox::report_runtime_error(e.span, &e.message);
         }
     }
