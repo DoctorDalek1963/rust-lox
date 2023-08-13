@@ -264,10 +264,12 @@ impl Resolver {
     /// Resolve a name in a local scope by traversing up the scope tree to find the definition of
     /// the name, and add it [`self.locals`](Self.locals).
     fn resolve_local(&mut self, name: WithSpan<String>) {
+        let num = self.scopes.len() - 1;
+
         for (idx, scope) in self.scopes.iter_mut().enumerate().rev() {
             if let Some(scope_value) = scope.get_mut(&name.value) {
                 scope_value.used = true;
-                self.locals.insert(name, idx);
+                self.locals.insert(name, num.saturating_sub(idx));
                 return;
             }
         }

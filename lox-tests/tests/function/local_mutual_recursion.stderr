@@ -1,0 +1,11 @@
+WARNING: Local function 'isOdd' is never used
+ --> 7:3
+  |
+7 |   fun isOdd(n) {
+  |   ^----------^
+
+ERROR: Undefined variable name 'isOdd'
+ --> 4:12
+  |
+4 |     return isOdd(n - 1);
+  |            ^---^

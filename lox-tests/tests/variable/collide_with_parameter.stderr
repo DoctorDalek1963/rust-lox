@@ -1,1 +1,5 @@
-TODO: Fix error message
+ERROR: Already declared variable 'a' in this local scope
+ --> 2:7
+  |
+2 |   var a; // Error at 'a': Already a variable with this name in this scope.
+  |       ^

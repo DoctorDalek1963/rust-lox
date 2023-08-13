@@ -1,0 +1,5 @@
+WARNING: Local function 'returnB' is never used
+  --> 21:7
+   |
+21 |       fun returnB() {
+   |       ^-----------^

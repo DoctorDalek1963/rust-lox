@@ -11,7 +11,10 @@ use std::{
     path::{Path, PathBuf},
     process::{self, Command},
     str::{self, Utf8Error},
-    sync::atomic::{AtomicU32, Ordering},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
 };
 use strip_ansi::strip_ansi;
 use thiserror::Error;
@@ -19,7 +22,7 @@ use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 static TOTAL_TESTS: AtomicU32 = AtomicU32::new(0);
-static TOTAL_ERRORS: AtomicU32 = AtomicU32::new(0);
+static TOTAL_FAILURES: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug, Error)]
 enum TestError {
@@ -62,7 +65,7 @@ fn run_test(file: &Path, interpreter_path: &Path) -> Result<(), TestError> {
     }
 }
 
-fn display_test_result(filename: &Path, interpreter_path: &Path) {
+fn display_test_result(filename: &Path, interpreter_path: &Path, print_lock: Arc<Mutex<()>>) {
     let result = run_test(filename, interpreter_path);
 
     let filename = filename
@@ -76,16 +79,20 @@ fn display_test_result(filename: &Path, interpreter_path: &Path) {
     TOTAL_TESTS.fetch_add(1, Ordering::Relaxed);
 
     match result {
-        Ok(()) => execute!(
-            stdout(),
-            Print(format!("{interpreter} {filename} ")),
-            SetForegroundColor(Color::Green),
-            SetAttribute(Attribute::Bold),
-            Print("PASSED\n"),
-            ResetColor,
-            SetAttribute(Attribute::Reset),
-        )
-        .unwrap(),
+        Ok(()) => {
+            let lock = print_lock.lock().unwrap();
+            execute!(
+                stdout(),
+                Print(format!("{interpreter} {filename} ")),
+                SetForegroundColor(Color::Green),
+                SetAttribute(Attribute::Bold),
+                Print("PASSED\n"),
+                ResetColor,
+                SetAttribute(Attribute::Reset),
+            )
+            .unwrap();
+            drop(lock);
+        }
         Err(error) => {
             let message = match error {
                 TestError::Io(e) => format!("IO error: {e:?}"),
@@ -110,12 +117,13 @@ fn display_test_result(filename: &Path, interpreter_path: &Path) {
                 }
             };
 
+            let lock = print_lock.lock().unwrap();
             execute!(
                 stdout(),
                 Print(format!("{interpreter} {filename} ")),
                 SetForegroundColor(Color::Red),
                 SetAttribute(Attribute::Bold),
-                Print("ERROR"),
+                Print("FAILED"),
                 ResetColor,
                 SetAttribute(Attribute::Reset),
                 Print(":\n"),
@@ -123,7 +131,8 @@ fn display_test_result(filename: &Path, interpreter_path: &Path) {
                 Print("\n"),
             )
             .unwrap();
-            TOTAL_ERRORS.fetch_add(1, Ordering::Relaxed);
+            drop(lock);
+            TOTAL_FAILURES.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
@@ -150,23 +159,25 @@ fn main() -> Result<(), io::Error> {
         .collect::<Vec<_>>();
 
     let pool = ThreadPool::new(num_cpus::get());
+    let print_lock = Arc::new(Mutex::new(()));
 
     for interpreter in &args.interpreter {
         for file in &files {
             let file = file.clone();
             let interpreter = interpreter.clone();
-            pool.execute(move || display_test_result(&file, &interpreter));
+            let print_lock = Arc::clone(&print_lock);
+            pool.execute(move || display_test_result(&file, &interpreter, print_lock));
         }
     }
 
     pool.join();
 
     println!(
-        "\n{} errors in {} tests",
-        TOTAL_ERRORS.load(Ordering::Relaxed),
+        "\n{} failures in {} tests",
+        TOTAL_FAILURES.load(Ordering::Relaxed),
         TOTAL_TESTS.load(Ordering::Relaxed)
     );
-    if TOTAL_ERRORS.load(Ordering::Relaxed) > 0 {
+    if TOTAL_FAILURES.load(Ordering::Relaxed) > 0 {
         process::exit(255);
     }
 

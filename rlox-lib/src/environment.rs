@@ -52,37 +52,24 @@ impl Environment {
         }
     }
 
+    /// Re-assign an already existing name in the environment at the given depth above this one.
     pub fn assign_at_depth(
         env: &Rc<RefCell<Environment>>,
         depth: usize,
         name: &WithSpan<String>,
         value: LoxObject,
-    ) -> Result<(), RuntimeError> {
-        match Environment::ancestor(env, depth) {
-            Some(env) => match env.borrow_mut().values.get_mut(&name.value) {
-                Some(current) => {
-                    *current = value;
-                    Ok(())
-                }
-                None => Err(RuntimeError {
-                    message: format!(
-                        concat!(
-                            "INTERNAL ERROR: Name '{}' does not exist ",
-                            "at expected environment depth"
-                        ),
-                        name.value
-                    ),
-                    span: name.span,
-                }),
-            },
-            None => Err(RuntimeError {
-                message: format!(
-                    "INTERNAL ERROR: Resolved environment depth for name '{}' is too great",
-                    name.value
-                ),
-                span: name.span,
-            }),
-        }
+    ) {
+        let env = Environment::ancestor(env, depth).expect(&format!(
+            "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+            name.value, name.span
+        ));
+        *env.borrow_mut()
+            .values
+            .get_mut(&name.value)
+            .expect(&format!(
+                "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
+                name.value, name.span
+            )) = value;
     }
 
     /// Get the value of the given name, returning a [`RuntimeError`] if the name is undefined.
@@ -104,29 +91,20 @@ impl Environment {
         env: &Rc<RefCell<Environment>>,
         depth: usize,
         name: &WithSpan<String>,
-    ) -> Result<LoxObject, RuntimeError> {
-        match Environment::ancestor(env, depth) {
-            Some(env) => match env.borrow().values.get(&name.value) {
-                Some(value) => Ok(value.clone()),
-                None => Err(RuntimeError {
-                    message: format!(
-                        concat!(
-                            "INTERNAL ERROR: Name '{}' does not exist ",
-                            "at expected environment depth"
-                        ),
-                        name.value
-                    ),
-                    span: name.span,
-                }),
-            },
-            None => Err(RuntimeError {
-                message: format!(
-                    "INTERNAL ERROR: Resolved environment depth for name '{}' is too great",
-                    name.value
-                ),
-                span: name.span,
-            }),
-        }
+    ) -> LoxObject {
+        Environment::ancestor(env, depth)
+            .expect(&format!(
+                "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+                name.value, name.span
+            ))
+            .borrow()
+            .values
+            .get(&name.value)
+            .expect(&format!(
+                "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
+                name.value, name.span
+            ))
+            .clone()
     }
 
     /// Get the ancestor of this environment at the given distance.

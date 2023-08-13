@@ -252,7 +252,7 @@ impl TwInterpreter {
                         *depth,
                         name,
                         value.value.clone(),
-                    )?,
+                    ),
                     None => self
                         .global_env
                         .borrow_mut()
@@ -267,8 +267,7 @@ impl TwInterpreter {
     /// Look up the name to resolve it in the [`locals`](Self.locals) map or in the global scope.
     fn look_up_name(&self, name: &WithSpan<String>) -> Result<LoxObject> {
         Ok(match self.locals.get(name) {
-            //Some(depth) => self.current_env.borrow().get_at_depth(depth, name)?,
-            Some(depth) => Environment::get_at_depth(&self.current_env, *depth, name)?,
+            Some(depth) => Environment::get_at_depth(&self.current_env, *depth, name),
             None => self.global_env.borrow().get(name)?,
         })
     }

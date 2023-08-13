@@ -1,0 +1,5 @@
+ERROR: Expected ')' after function parameters
+ --> 3:1
+  |
+3 | fun foo(a, b c, d, e, f) {}
+  | ^------------^

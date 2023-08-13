@@ -1,0 +1,5 @@
+ERROR: Cannot return outside of a function
+ --> 1:1
+  |
+1 | return "wat"; // Error at 'return': Can't return from top-level code.
+  | ^-----------^
