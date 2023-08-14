@@ -2,6 +2,7 @@
 
 use crate::{
     callable::{lox_function::LoxFunction, LoxCallable},
+    class::{LoxClass, LoxInstance},
     span::WithSpan,
 };
 use std::rc::Rc;
@@ -19,6 +20,8 @@ pub enum LoxObject {
     Number(f64),
     NativeFunction(Rc<dyn LoxCallable>),
     LoxFunction(Rc<LoxFunction>),
+    LoxClass(Rc<LoxClass>),
+    LoxInstance(LoxInstance),
 }
 
 impl PartialEq for LoxObject {
@@ -46,6 +49,8 @@ impl LoxObject {
             Number(_) => "number".to_string(),
             NativeFunction(_) => "<native fn>".to_string(),
             LoxFunction(_) => "<fn>".to_string(),
+            LoxClass(_) => "<class>".to_string(),
+            LoxInstance(instance) => format!("<\"{}\" instance>", instance.class_name()),
         }
     }
 
@@ -60,6 +65,8 @@ impl LoxObject {
             Number(n) => n.to_string(),
             NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
             LoxFunction(func) => format!("<fn \"{}\">", func.name()),
+            LoxClass(class) => format!("<class \"{}\">", class.name()),
+            LoxInstance(instance) => format!("<\"{}\" instance>", instance.class_name()),
         }
     }
 
@@ -68,12 +75,8 @@ impl LoxObject {
         use LoxObject::*;
 
         match self {
-            Nil => "nil".to_string(),
-            Boolean(b) => b.to_string(),
             String(s) => format!("{s:?}"),
-            Number(n) => n.to_string(),
-            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
-            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
+            _ => self.print(),
         }
     }
 

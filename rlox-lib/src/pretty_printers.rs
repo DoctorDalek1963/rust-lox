@@ -1,6 +1,9 @@
 //! This module provides pretty-printers for the AST.
 
-use crate::ast::{Expr, SpanExpr, SpanStmt, Stmt};
+use crate::{
+    ast::{Expr, SpanExpr, SpanStmt, Stmt},
+    span::WithSpan,
+};
 
 /// Pretty-print the AST with clarifying parentheses.
 pub struct ParenPrinter;
@@ -18,6 +21,29 @@ impl ParenPrinter {
     /// Print a single statement.
     fn print_stmt(stmt: &SpanStmt) -> String {
         match &stmt.value {
+            Stmt::ClassDecl(name, methods) => format!(
+                "class {} {{\n{}\n}}",
+                name.value,
+                methods
+                    .iter()
+                    .map(
+                        |WithSpan {
+                             span: _,
+                             value: (name, parameters, _, body),
+                         }| format!(
+                            "{}({}) {{\n{}\n}}",
+                            name.value,
+                            parameters
+                                .iter()
+                                .map(|x| &x.value)
+                                .intersperse(&", ".to_string())
+                                .cloned()
+                                .collect::<String>(),
+                            Self::print_stmts(body)
+                        )
+                    )
+                    .collect::<String>()
+            ),
             Stmt::VarDecl(name, initializer) => format!(
                 "var {}{};",
                 name.value,
@@ -27,7 +53,7 @@ impl ParenPrinter {
                     String::new()
                 }
             ),
-            Stmt::FunDecl(name, parameters, _, body) => format!(
+            Stmt::FunDecl((name, parameters, _, body)) => format!(
                 "fun {}({}) {{\n{}\n}}",
                 name.value,
                 parameters

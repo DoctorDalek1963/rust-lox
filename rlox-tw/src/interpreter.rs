@@ -2,8 +2,12 @@
 
 use crate::resolver::Resolver;
 use rlox_lib::{
-    ast::{BinaryOperator, Expr, LogicalOperator, SpanExpr, SpanStmt, Stmt, UnaryOperator},
+    ast::{
+        BinaryOperator, Expr, FunctionOrMethod, LogicalOperator, SpanExpr, SpanStmt, Stmt,
+        UnaryOperator,
+    },
     callable::{self, lox_function::LoxFunction, LoxCallable},
+    class::LoxClass,
     environment::Environment,
     interpreter::{ErrorOrReturn, Interpreter, Result, RuntimeError},
     object::{LoxObject, SpanObject},
@@ -102,8 +106,9 @@ impl TwInterpreter {
     /// Execute the given statement.
     fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
         match &stmt.value {
+            Stmt::ClassDecl(name, methods) => self.execute_class_decl(name, methods)?,
             Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
-            Stmt::FunDecl(name, parameters, _, body) => {
+            Stmt::FunDecl((name, parameters, _, body)) => {
                 self.execute_fun_decl(name, parameters, body)
             }
             Stmt::Expression(expr) => {
@@ -118,6 +123,23 @@ impl TwInterpreter {
             Stmt::Block(stmts) => self.execute_block(stmts, None)?,
         }
 
+        Ok(())
+    }
+
+    /// Execute a class declaration in the current environment.
+    fn execute_class_decl(
+        &mut self,
+        name: &WithSpan<String>,
+        _methods: &[WithSpan<FunctionOrMethod>],
+    ) -> Result<()> {
+        // TODO: Why do we define and assign separately?
+        self.current_env
+            .borrow_mut()
+            .define(name.value.clone(), LoxObject::Nil);
+        let class = LoxObject::LoxClass(Rc::new(LoxClass::new(name.clone())));
+        self.current_env
+            .borrow_mut()
+            .assign(&name.value, class, name.span)?;
         Ok(())
     }
 
@@ -312,6 +334,7 @@ impl TwInterpreter {
         match &callee.value {
             LoxObject::NativeFunction(func) => Ok(Rc::clone(func)),
             LoxObject::LoxFunction(func) => Ok(Rc::clone(func) as Rc<dyn LoxCallable>),
+            LoxObject::LoxClass(class) => Ok(Rc::new(Rc::clone(class)) as Rc<dyn LoxCallable>),
             _ => Err(RuntimeError {
                 message: format!(
                     "Can only call objects of type function or class, not {}",

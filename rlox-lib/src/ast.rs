@@ -105,12 +105,16 @@ pub enum Expr {
 /// An [`Stmt`] wrapped in [`WithSpan`].
 pub type SpanStmt = WithSpan<Stmt>;
 
+/// A function or method declaration. Identifier, parameters, right paren span, and body.
+pub type FunctionOrMethod = (WithSpan<String>, Vec<WithSpan<String>>, Span, Vec<SpanStmt>);
+
 /// A list of all the possible statements.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::missing_docs_in_private_items)]
 pub enum Stmt {
+    ClassDecl(WithSpan<String>, Vec<WithSpan<FunctionOrMethod>>),
     VarDecl(WithSpan<String>, Option<SpanExpr>),
-    FunDecl(WithSpan<String>, Vec<WithSpan<String>>, Span, Vec<SpanStmt>),
+    FunDecl(FunctionOrMethod),
     Expression(SpanExpr),
     If(SpanExpr, Box<SpanStmt>, Option<Box<SpanStmt>>),
     Print(SpanExpr),

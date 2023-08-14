@@ -38,11 +38,12 @@ enum FunctionType {
 }
 
 /// An enum to distinguish different things that a name could refer to. Used for warning reporting.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum ScopeValueType {
-    Variable,
+    Class,
     Function,
     Parameter,
+    Variable,
 }
 
 /// A value for the [`scopes`](Resolver.scopes) map.
@@ -132,6 +133,10 @@ impl Resolver {
                 self.resolve_stmts(body)?;
                 self.end_scope();
             }
+            Stmt::ClassDecl(name, _methods) => {
+                self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
+                self.define_name(&name.value);
+            }
             Stmt::VarDecl(name, initializer) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
                 if let Some(initializer) = initializer {
@@ -139,7 +144,7 @@ impl Resolver {
                 }
                 self.define_name(&name);
             }
-            Stmt::FunDecl(name, params, right_paren, body) => {
+            Stmt::FunDecl((name, params, right_paren, body)) => {
                 self.declare_name(
                     name.clone(),
                     Span::between(&stmt.span, &right_paren),
@@ -316,19 +321,12 @@ fn report_warnings(scope: HashMap<String, ScopeValue>) {
         )
         .collect();
 
-    names.sort_by(|(_, l_type, l_name), (_, r_type, r_name)| {
-        use ScopeValueType::*;
-
-        match (l_type, r_type) {
-            (Function, Function) | (Parameter, Parameter) | (Variable, Variable) => {
-                l_name.cmp(r_name)
-            }
-            (Function, Parameter | Variable) => Ordering::Less,
-            (Parameter, Function) => Ordering::Greater,
-            (Parameter, Variable) => Ordering::Less,
-            (Variable, Parameter | Function) => Ordering::Greater,
-        }
-    });
+    names.sort_by(
+        |(_, l_type, l_name), (_, r_type, r_name)| match l_type.cmp(r_type) {
+            Ordering::Equal => l_name.cmp(&r_name),
+            other => other,
+        },
+    );
 
     for (span, value_type, name) in names {
         rlox_lib::lox::report_warning(
@@ -336,9 +334,10 @@ fn report_warnings(scope: HashMap<String, ScopeValue>) {
             &format!(
                 "{} '{name}' is never used",
                 match value_type {
-                    ScopeValueType::Variable => "Local variable",
+                    ScopeValueType::Class => "Class",
                     ScopeValueType::Function => "Local function",
                     ScopeValueType::Parameter => "Parameter",
+                    ScopeValueType::Variable => "Local variable",
                 }
             ),
         );

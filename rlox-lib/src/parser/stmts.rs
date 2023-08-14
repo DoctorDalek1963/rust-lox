@@ -2,7 +2,7 @@
 
 use super::{ParseResult, Parser};
 use crate::{
-    ast::{Expr, SpanStmt, Stmt},
+    ast::{Expr, FunctionOrMethod, SpanStmt, Stmt},
     lox::report_non_runtime_error,
     span::{Span, WithSpan},
     tokens::{Token, TokenType},
@@ -14,8 +14,9 @@ use std::fmt;
 enum FunDeclKind {
     /// A free function.
     Function,
-    // A method in a class.
-    //Method
+
+    /// A method in a class.
+    Method,
 }
 
 impl fmt::Display for FunDeclKind {
@@ -25,17 +26,23 @@ impl fmt::Display for FunDeclKind {
             "{}",
             match self {
                 Self::Function => "function",
-                //Self::Method => "method",
+                Self::Method => "method",
             }
         )
     }
 }
 
 impl<'s> Parser<'s> {
-    /// declaration → funDecl | varDecl | statement ;
+    /// declaration → classDecl | funDecl | varDecl | statement ;
     pub(super) fn parse_declaration(&mut self) -> Option<SpanStmt> {
-        let result = if self.match_tokens([TokenType::Fun]) {
+        let result = if self.match_tokens([TokenType::Class]) {
+            self.parse_class_decl()
+        } else if self.match_tokens([TokenType::Fun]) {
             self.parse_function(FunDeclKind::Function)
+                .map(|WithSpan { span, value }| WithSpan {
+                    span,
+                    value: Stmt::FunDecl(value),
+                })
         } else if self.match_tokens([TokenType::Var]) {
             self.parse_var_decl()
         } else {
@@ -54,7 +61,7 @@ impl<'s> Parser<'s> {
 
     /// function → IDENTIFIER "(" parameters? ")" block ;
     /// parameters → IDENTIFIER ( "," IDENTIFIER )* ;
-    fn parse_function(&mut self, kind: FunDeclKind) -> ParseResult<'s, SpanStmt> {
+    fn parse_function(&mut self, kind: FunDeclKind) -> ParseResult<'s, WithSpan<FunctionOrMethod>> {
         let previous_span = if kind == FunDeclKind::Function {
             self.previous().map(|token| token.span)
         } else {
@@ -148,7 +155,55 @@ impl<'s> Parser<'s> {
 
         Ok(WithSpan {
             span,
-            value: Stmt::FunDecl(name, parameters, right_paren, stmts.value),
+            value: (name, parameters, right_paren, stmts.value),
+        })
+    }
+
+    /// classDecl → "class" IDENTIFIER "{" function* "}" ;
+    fn parse_class_decl(&mut self) -> ParseResult<'s, SpanStmt> {
+        let class_keyword_span = self.previous().unwrap().span;
+        let name = {
+            let Token { lexeme, span, .. } = self.consume(
+                TokenType::Identifier,
+                Some(class_keyword_span),
+                "Expected identifier after 'class' keyword".to_string(),
+            )?;
+            WithSpan {
+                span,
+                value: lexeme.to_string(),
+            }
+        };
+
+        let left_brace_span = self
+            .consume(
+                TokenType::LeftBrace,
+                Some(class_keyword_span.union(&name.span)),
+                "Expected '{' before class body".to_string(),
+            )?
+            .span;
+
+        let mut methods = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            methods.push(self.parse_function(FunDeclKind::Method)?);
+        }
+
+        let right_brace_span = self
+            .consume(
+                TokenType::RightBrace,
+                Some(
+                    class_keyword_span.union(if let Some(method) = methods.last() {
+                        &method.span
+                    } else {
+                        &left_brace_span
+                    }),
+                ),
+                "Expected '}' after class body".to_string(),
+            )?
+            .span;
+
+        Ok(WithSpan {
+            span: class_keyword_span.union(&right_brace_span),
+            value: Stmt::ClassDecl(name, methods),
         })
     }
 
