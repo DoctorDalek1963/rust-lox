@@ -93,6 +93,8 @@ pub enum Expr {
     Boolean(bool),
     Binary(Box<SpanExpr>, WithSpan<BinaryOperator>, Box<SpanExpr>),
     Call(Box<SpanExpr>, Vec<SpanExpr>, Span),
+    Get(Box<SpanExpr>, WithSpan<String>),
+    Set(Box<SpanExpr>, WithSpan<String>, Box<SpanExpr>),
     Grouping(Box<SpanExpr>),
     String(String),
     Number(f64),

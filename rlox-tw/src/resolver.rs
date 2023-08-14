@@ -215,6 +215,11 @@ impl Resolver {
                     self.resolve_expr(arg)?;
                 }
             }
+            Expr::Get(expr, _) => self.resolve_expr(expr)?,
+            Expr::Set(object, _, value) => {
+                self.resolve_expr(value)?;
+                self.resolve_expr(object)?;
+            }
             Expr::Grouping(expr) | Expr::Unary(_, expr) => self.resolve_expr(expr)?,
             Expr::Nil | Expr::Boolean(_) | Expr::String(_) | Expr::Number(_) => (),
         }

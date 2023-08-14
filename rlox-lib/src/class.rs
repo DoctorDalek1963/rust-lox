@@ -1,7 +1,5 @@
 //! This module provides [`LoxClass`] and [`LoxInstance`].
 
-use std::rc::Rc;
-
 use crate::{
     callable::LoxCallable,
     interpreter::RuntimeError,
@@ -9,12 +7,19 @@ use crate::{
     span::{Span, WithSpan},
     Interpreter,
 };
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// A class itself, used to create instances.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct LoxClass {
     /// The name of the class, including the span where it was defined.
     name: WithSpan<String>,
+}
+
+impl PartialEq for LoxClass {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 impl LoxClass {
@@ -41,25 +46,49 @@ impl LoxCallable for Rc<LoxClass> {
         _arguments: &[SpanObject],
         _close_paren: Span,
     ) -> Result<LoxObject, RuntimeError> {
-        Ok(LoxObject::LoxInstance(LoxInstance::new(Rc::clone(self))))
+        Ok(LoxObject::LoxInstance(Rc::new(RefCell::new(
+            LoxInstance::new(Rc::clone(self)),
+        ))))
     }
 }
 
 /// An instance of a class, created from its constructor.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LoxInstance {
     /// The class that created this instance.
     class: Rc<LoxClass>,
+
+    /// The fields on this instance.
+    fields: HashMap<String, LoxObject>,
 }
 
 impl LoxInstance {
     /// Create a new instance.
     pub fn new(class: Rc<LoxClass>) -> Self {
-        Self { class }
+        Self {
+            class,
+            fields: HashMap::new(),
+        }
     }
 
     /// Get the name of the class that created this instance.
     pub fn class_name(&self) -> &str {
         self.class.name()
+    }
+
+    /// Get the given property on this instance.
+    pub fn get(&self, ident: &WithSpan<String>) -> Result<LoxObject, RuntimeError> {
+        self.fields
+            .get(&ident.value)
+            .cloned()
+            .ok_or_else(|| RuntimeError {
+                message: format!("No property '{}' on instance", ident.value),
+                span: ident.span,
+            })
+    }
+
+    /// Set the value of the field.
+    pub fn set(&mut self, ident: String, value: LoxObject) {
+        self.fields.insert(ident, value);
     }
 }

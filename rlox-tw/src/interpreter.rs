@@ -239,6 +239,47 @@ impl TwInterpreter {
             Expr::Call(callee, arguments, close_paren) => {
                 self.evaluate_function_call(callee, arguments, close_paren)?
             }
+            Expr::Get(expr, ident) => {
+                let object = self.evaluate_expression(expr)?;
+                if let LoxObject::LoxInstance(instance) = object.value {
+                    WithSpan {
+                        span,
+                        value: instance.borrow().get(ident)?,
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        message: "Only class instances have properties".to_string(),
+                        span,
+                    }
+                    .into());
+                }
+            }
+            Expr::Set(object, ident, r_value) => {
+                let object = self.evaluate_expression(object)?;
+                if let WithSpan {
+                    span: _,
+                    value: LoxObject::LoxInstance(instance),
+                } = object
+                {
+                    let r_value = self.evaluate_expression(r_value)?;
+                    instance
+                        .borrow_mut()
+                        .set(ident.value.clone(), r_value.value.clone());
+                    WithSpan {
+                        span,
+                        value: r_value.value,
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        message: format!(
+                            "Only class instances have fields, not objects of type {}",
+                            object.value.type_name()
+                        ),
+                        span: object.span.union(&ident.span),
+                    }
+                    .into());
+                }
+            }
             Expr::Grouping(expr) => {
                 let value = self.evaluate_expression(expr)?.value;
                 WithSpan { span, value }

@@ -5,7 +5,7 @@ use crate::{
     class::{LoxClass, LoxInstance},
     span::WithSpan,
 };
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 /// A [`LoxObject`] wrapped in [`WithSpan`].
 pub type SpanObject = WithSpan<LoxObject>;
@@ -21,7 +21,7 @@ pub enum LoxObject {
     NativeFunction(Rc<dyn LoxCallable>),
     LoxFunction(Rc<LoxFunction>),
     LoxClass(Rc<LoxClass>),
-    LoxInstance(LoxInstance),
+    LoxInstance(Rc<RefCell<LoxInstance>>),
 }
 
 impl PartialEq for LoxObject {
@@ -32,6 +32,9 @@ impl PartialEq for LoxObject {
             (Self::String(a), Self::String(b)) => a == b,
             (Self::Number(a), Self::Number(b)) => a == b,
             (Self::NativeFunction(a), Self::NativeFunction(b)) => a.name() == b.name(),
+            (Self::LoxFunction(a), Self::LoxFunction(b)) => a.name() == b.name(),
+            (Self::LoxClass(a), Self::LoxClass(b)) => a == b,
+            (Self::LoxInstance(a), Self::LoxInstance(b)) => *a.borrow() == *b.borrow(),
             _ => false,
         }
     }
@@ -50,7 +53,7 @@ impl LoxObject {
             NativeFunction(_) => "<native fn>".to_string(),
             LoxFunction(_) => "<fn>".to_string(),
             LoxClass(_) => "<class>".to_string(),
-            LoxInstance(instance) => format!("<\"{}\" instance>", instance.class_name()),
+            LoxInstance(instance) => format!("<\"{}\" instance>", instance.borrow().class_name()),
         }
     }
 
@@ -66,7 +69,7 @@ impl LoxObject {
             NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
             LoxFunction(func) => format!("<fn \"{}\">", func.name()),
             LoxClass(class) => format!("<class \"{}\">", class.name()),
-            LoxInstance(instance) => format!("<\"{}\" instance>", instance.class_name()),
+            LoxInstance(instance) => format!("<\"{}\" instance>", instance.borrow().class_name()),
         }
     }
 

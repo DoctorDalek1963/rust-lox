@@ -119,6 +119,13 @@ impl ParenPrinter {
                     .intersperse(", ".to_string())
                     .collect::<String>()
             ),
+            Expr::Get(expr, ident) => format!("({}).{}", Self::print_expr(expr), ident.value),
+            Expr::Set(object, ident, value) => format!(
+                "({}).{} = {}",
+                Self::print_expr(object),
+                ident.value,
+                Self::print_expr(value)
+            ),
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
