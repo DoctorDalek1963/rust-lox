@@ -1,0 +1,5 @@
+ERROR: Can only call objects of type function or class, not string
+ --> 6:1
+  |
+6 | foo.bar(); // expect runtime error: Can only call functions and classes.
+  | ^-------^

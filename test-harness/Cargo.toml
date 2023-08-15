@@ -13,6 +13,7 @@ crossterm.workspace = true
 num_cpus = "1.16.0"
 rlox-lib.workspace = true
 rlox-tw = { path = "../rlox-tw" }
+similar = "2.2.1"
 strip-ansi = "0.1.0"
 thiserror.workspace = true
 threadpool = "1.8.1"

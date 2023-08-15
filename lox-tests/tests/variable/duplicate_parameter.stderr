@@ -1,5 +1,5 @@
 ERROR: Already declared variable 'arg' in this local scope
- --> 2:9
+ --> 2:14
   |
-2 |         arg) { // Error at 'arg': Already a variable with this name in this scope.
-  |         ^-^
+2 | fun foo(arg, arg) {
+  |              ^-^

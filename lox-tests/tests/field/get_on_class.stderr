@@ -1,0 +1,5 @@
+ERROR: Only class instances have properties
+ --> 2:1
+  |
+2 | Foo.bar; // expect runtime error: Only instances have properties.
+  | ^-----^

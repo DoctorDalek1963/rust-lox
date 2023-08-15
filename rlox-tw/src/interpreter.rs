@@ -494,8 +494,8 @@ impl TwInterpreter {
             },
             // Guaranteed to be of different types
             _ => match operator {
-                EqualEqual => Boolean(false),
-                BangEqual => Boolean(true),
+                EqualEqual => Boolean(left == right),
+                BangEqual => Boolean(left != right),
                 _ => unsupported()?,
             },
         };

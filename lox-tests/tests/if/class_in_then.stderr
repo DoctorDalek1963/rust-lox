@@ -1,0 +1,5 @@
+ERROR: at 'class': Expected expression, got Class
+ --> 2:11
+  |
+2 | if (true) class Foo {}
+  |           ^---^

@@ -1,5 +1,2 @@
-ERROR: at 'class': Expected expression, got Class
- --> 2:11
-  |
-2 | if (true) class Foo {}
-  |           ^---^
+// [line 2] Error at 'class': Expect expression.
+if (true) class Foo {}
