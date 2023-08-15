@@ -53,7 +53,7 @@ impl LoxObject {
             NativeFunction(_) => "<native fn>".to_string(),
             LoxFunction(_) => "<fn>".to_string(),
             LoxClass(_) => "<class>".to_string(),
-            LoxInstance(instance) => format!("<\"{}\" instance>", instance.borrow().class_name()),
+            LoxInstance(instance) => format!("<{} instance>", instance.borrow().class_name()),
         }
     }
 
@@ -66,10 +66,10 @@ impl LoxObject {
             Boolean(b) => b.to_string(),
             String(s) => s.to_string(),
             Number(n) => n.to_string(),
-            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
-            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
-            LoxClass(class) => format!("<class \"{}\">", class.name()),
-            LoxInstance(instance) => format!("<\"{}\" instance>", instance.borrow().class_name()),
+            NativeFunction(func) => format!("<native fn {}>", func.name()),
+            LoxFunction(func) => format!("<fn {}>", func.name()),
+            LoxClass(class) => format!("<class {}>", class.name()),
+            LoxInstance(instance) => format!("<{} instance>", instance.borrow().class_name()),
         }
     }
 
