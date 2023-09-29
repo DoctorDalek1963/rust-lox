@@ -130,13 +130,34 @@ impl TwInterpreter {
     fn execute_class_decl(
         &mut self,
         name: &WithSpan<String>,
-        _methods: &[WithSpan<FunctionOrMethod>],
+        methods: &[WithSpan<FunctionOrMethod>],
     ) -> Result<()> {
-        // TODO: Why do we define and assign separately?
         self.current_env
             .borrow_mut()
             .define(name.value.clone(), LoxObject::Nil);
-        let class = LoxObject::LoxClass(Rc::new(LoxClass::new(name.clone())));
+
+        let methods_map = methods
+            .iter()
+            .map(
+                |WithSpan {
+                     span: _,
+                     value: (method_name, params, _close_paren_span, body),
+                 }| {
+                    (
+                        method_name.value.clone(),
+                        Rc::new(LoxFunction::new(
+                            method_name.clone(),
+                            params.clone(),
+                            body.clone(),
+                            Rc::clone(&self.current_env),
+                        )),
+                    )
+                },
+            )
+            .collect();
+
+        let class = LoxObject::LoxClass(Rc::new(LoxClass::new(name.clone(), methods_map)));
+
         self.current_env
             .borrow_mut()
             .assign(&name.value, class, name.span)?;

@@ -35,6 +35,9 @@ enum FunctionType {
 
     /// In a free function.
     Function,
+
+    /// In a method on a class.
+    Method,
 }
 
 /// An enum to distinguish different things that a name could refer to. Used for warning reporting.
@@ -133,9 +136,18 @@ impl Resolver {
                 self.resolve_stmts(body)?;
                 self.end_scope();
             }
-            Stmt::ClassDecl(name, _methods) => {
+            Stmt::ClassDecl(name, methods) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
                 self.define_name(&name.value);
+
+                for method in methods {
+                    let WithSpan {
+                        span: _,
+                        value: (_method_name, params, _close_paren_span, body),
+                    } = method;
+                    let declaration = FunctionType::Method;
+                    self.resolve_function(params, body, declaration)?;
+                }
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
@@ -274,7 +286,7 @@ impl Resolver {
     /// Resolve a name in a local scope by traversing up the scope tree to find the definition of
     /// the name, and add it [`self.locals`](Self.locals).
     fn resolve_local(&mut self, name: WithSpan<String>) {
-        let num = self.scopes.len() - 1;
+        let num = self.scopes.len().saturating_sub(1);
 
         for (idx, scope) in self.scopes.iter_mut().enumerate().rev() {
             if let Some(scope_value) = scope.get_mut(&name.value) {
