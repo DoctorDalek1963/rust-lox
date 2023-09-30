@@ -1,0 +1,5 @@
+ERROR: Invalid assignment target
+ --> 3:5
+  |
+3 |     this = "value"; // Error at '=': Invalid assignment target.
+  |     ^----^

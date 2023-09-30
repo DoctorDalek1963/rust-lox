@@ -79,17 +79,21 @@ impl LoxInstance {
     }
 
     /// Get the given property on this instance, either a field or a method.
-    pub fn get(&self, ident: &WithSpan<String>) -> Result<LoxObject, RuntimeError> {
-        match self.fields.get(&ident.value).cloned() {
+    pub fn get(
+        self_instance: &Rc<RefCell<Self>>,
+        ident: &WithSpan<String>,
+    ) -> Result<LoxObject, RuntimeError> {
+        match self_instance.borrow().fields.get(&ident.value).cloned() {
             Some(field) => Ok(field),
-            None => self
-                .class
-                .find_method(&ident.value)
-                .map(|function| LoxObject::LoxFunction(Rc::clone(function)))
-                .ok_or_else(|| RuntimeError {
+            None => match self_instance.borrow().class.find_method(&ident.value) {
+                Some(method) => Ok(LoxObject::LoxFunction(
+                    method.bind_this(LoxObject::LoxInstance(Rc::clone(self_instance))),
+                )),
+                None => Err(RuntimeError {
                     message: format!("No property '{}' on instance", ident.value),
                     span: ident.span,
                 }),
+            },
         }
     }
 

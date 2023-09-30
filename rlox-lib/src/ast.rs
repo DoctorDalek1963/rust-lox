@@ -95,6 +95,7 @@ pub enum Expr {
     Call(Box<SpanExpr>, Vec<SpanExpr>, Span),
     Get(Box<SpanExpr>, WithSpan<String>),
     Set(Box<SpanExpr>, WithSpan<String>, Box<SpanExpr>),
+    This,
     Grouping(Box<SpanExpr>),
     String(String),
     Number(f64),

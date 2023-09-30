@@ -126,6 +126,7 @@ impl ParenPrinter {
                 ident.value,
                 Self::print_expr(value)
             ),
+            Expr::This => String::from("this"),
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),

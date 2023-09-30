@@ -346,7 +346,9 @@ impl<'s> Parser<'s> {
     fn parse_primary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
-        if self.match_tokens([True, False, Nil, Number, String, Identifier, LeftParen]) {
+        if self.match_tokens([
+            True, False, Nil, This, Number, String, Identifier, LeftParen,
+        ]) {
             let previous = self.previous();
 
             let mut span = match previous {
@@ -363,6 +365,9 @@ impl<'s> Parser<'s> {
                 Some(Token {
                     token_type: Nil, ..
                 }) => Expr::Nil,
+                Some(Token {
+                    token_type: This, ..
+                }) => Expr::This,
                 Some(Token {
                     token_type: Number,
                     literal: Some(TokenLiteral::Number(num)),

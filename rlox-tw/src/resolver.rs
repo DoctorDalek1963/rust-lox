@@ -140,6 +140,23 @@ impl Resolver {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
                 self.define_name(&name.value);
 
+                self.begin_scope();
+                if let Some(scope) = self.scopes.last_mut() {
+                    let ret = scope.insert(
+                        String::from("this"),
+                        ScopeValue {
+                            declaration: name.span,
+                            value_type: ScopeValueType::Variable,
+                            defined: true,
+                            used: true,
+                        },
+                    );
+                    assert!(
+                        ret.is_none(),
+                        "`this` should not exist in the new scope when declaring a class"
+                    );
+                }
+
                 for method in methods {
                     let WithSpan {
                         span: _,
@@ -148,6 +165,8 @@ impl Resolver {
                     let declaration = FunctionType::Method;
                     self.resolve_function(params, body, declaration)?;
                 }
+
+                self.end_scope();
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
@@ -232,6 +251,10 @@ impl Resolver {
                 self.resolve_expr(value)?;
                 self.resolve_expr(object)?;
             }
+            Expr::This => self.resolve_local(WithSpan {
+                span: expr.span,
+                value: String::from("this"),
+            }),
             Expr::Grouping(expr) | Expr::Unary(_, expr) => self.resolve_expr(expr)?,
             Expr::Nil | Expr::Boolean(_) | Expr::String(_) | Expr::Number(_) => (),
         }

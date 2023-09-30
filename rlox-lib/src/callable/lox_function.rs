@@ -8,10 +8,10 @@ use crate::{
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 /// A function that was defined by user Lox code.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct LoxFunction {
     /// The name of the function, including the span where it was defined.
     name: WithSpan<String>,
@@ -24,6 +24,24 @@ pub struct LoxFunction {
 
     /// The environment that the function was defined in.
     environment: Rc<RefCell<Environment>>,
+}
+
+impl fmt::Debug for LoxFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoxFunction")
+            .field("name", &self.name)
+            .field("parameters", &self.parameters)
+            .field("body", &self.body)
+            //.field("environment", &self.environment)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for LoxFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.parameters == other.parameters && self.body == other.body
+        //&& self.environment == other.environment
+    }
 }
 
 impl LoxFunction {
@@ -40,6 +58,18 @@ impl LoxFunction {
             body: body.into(),
             environment,
         }
+    }
+
+    /// Return a copy of this function where `this` is bound to the given value.
+    pub fn bind_this(&self, this_value: LoxObject) -> Rc<LoxFunction> {
+        let mut this_environment = Environment::enclosing(Some(Rc::clone(&self.environment)));
+        this_environment.define(String::from("this"), this_value);
+        Rc::new(LoxFunction::new(
+            self.name.clone(),
+            self.parameters.clone(),
+            self.body.clone(),
+            Rc::new(RefCell::new(this_environment)),
+        ))
     }
 }
 

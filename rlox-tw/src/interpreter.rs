@@ -7,13 +7,14 @@ use rlox_lib::{
         UnaryOperator,
     },
     callable::{self, lox_function::LoxFunction, LoxCallable},
-    class::LoxClass,
+    class::{LoxClass, LoxInstance},
     environment::Environment,
     interpreter::{ErrorOrReturn, Interpreter, Result, RuntimeError},
     object::{LoxObject, SpanObject},
     span::{Span, WithSpan},
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
+use tracing::{instrument, trace};
 
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -92,6 +93,25 @@ impl Interpreter for TwInterpreter {
         self.current_env = original_env;
         result
     }
+}
+
+macro_rules! trace_evaluating {
+    ($expression:expr) => {
+        ::tracing::trace!(
+            "Evaluating `{}`",
+            ::rlox_lib::pretty_printers::ParenPrinter::print_expr($expression)
+        )
+    };
+}
+
+macro_rules! trace_evaluated {
+    ($expression:expr, $result:expr) => {
+        ::tracing::trace!(
+            "Evaluated `{}` to {}",
+            ::rlox_lib::pretty_printers::ParenPrinter::print_expr($expression),
+            $result.repr()
+        )
+    };
 }
 
 impl TwInterpreter {
@@ -239,11 +259,17 @@ impl TwInterpreter {
     }
 
     /// Evaluate the given expression.
+    #[instrument(skip_all)]
     fn evaluate_expression(&mut self, expr: &SpanExpr) -> Result<SpanObject> {
-        let WithSpan { span, value: expr } = expr;
+        trace_evaluating!(expr);
+
+        let WithSpan {
+            span,
+            value: expr_value,
+        } = expr;
         let span = *span;
 
-        Ok(match expr {
+        let result = match expr_value {
             Expr::Nil => WithSpan {
                 span,
                 value: LoxObject::Nil,
@@ -255,17 +281,17 @@ impl TwInterpreter {
             Expr::Binary(left, operator, right) => {
                 let left = self.evaluate_expression(left)?;
                 let right = self.evaluate_expression(right)?;
-                self.evaluate_binary_expression(*operator, left, right)?
+                self.evaluate_binary_expression(*operator, left, right, expr)?
             }
             Expr::Call(callee, arguments, close_paren) => {
-                self.evaluate_function_call(callee, arguments, close_paren)?
+                self.evaluate_function_call(callee, arguments, close_paren, expr)?
             }
             Expr::Get(expr, ident) => {
                 let object = self.evaluate_expression(expr)?;
                 if let LoxObject::LoxInstance(instance) = object.value {
                     WithSpan {
                         span,
-                        value: instance.borrow().get(ident)?,
+                        value: LoxInstance::get(&instance, ident)?,
                     }
                 } else {
                     return Err(RuntimeError {
@@ -301,6 +327,13 @@ impl TwInterpreter {
                     .into());
                 }
             }
+            Expr::This => WithSpan {
+                span,
+                value: self.look_up_name(&WithSpan {
+                    span,
+                    value: String::from("this"),
+                })?,
+            },
             Expr::Grouping(expr) => {
                 let value = self.evaluate_expression(expr)?.value;
                 WithSpan { span, value }
@@ -314,11 +347,11 @@ impl TwInterpreter {
                 value: LoxObject::Number(*number),
             },
             Expr::Logical(left, operator, right) => {
-                self.evaluate_logical_expression(left, operator, right)?
+                self.evaluate_logical_expression(left, operator, right, expr)?
             }
-            Expr::Unary(operator, expr) => {
-                let value = self.evaluate_expression(expr)?;
-                self.evaluate_unary_expression(*operator, value)?
+            Expr::Unary(operator, r_expr) => {
+                let value = self.evaluate_expression(r_expr)?;
+                self.evaluate_unary_expression(*operator, value, expr)?
             }
             Expr::Variable(name) => WithSpan {
                 span,
@@ -345,11 +378,17 @@ impl TwInterpreter {
 
                 value
             }
-        })
+        };
+
+        trace_evaluated!(expr, result);
+        Ok(result)
     }
 
     /// Look up the name to resolve it in the [`locals`](Self.locals) map or in the global scope.
+    #[instrument(skip_all)]
     fn look_up_name(&self, name: &WithSpan<String>) -> Result<LoxObject> {
+        trace!("Looking up name `{}`", name.value);
+
         Ok(match self.locals.get(name) {
             Some(depth) => Environment::get_at_depth(&self.current_env, *depth, name),
             None => self.global_env.borrow().get(name)?,
@@ -357,12 +396,16 @@ impl TwInterpreter {
     }
 
     /// Evaluate a function call with the given callee and arguments.
+    #[instrument(skip_all)]
     fn evaluate_function_call(
         &mut self,
         callee: &SpanExpr,
         arguments: &[SpanExpr],
         close_paren: &Span,
+        expr: &SpanExpr,
     ) -> Result<SpanObject> {
+        trace_evaluating!(expr);
+
         let callee = self.evaluate_expression(callee)?;
         let callee_span = callee.span;
 
@@ -381,6 +424,8 @@ impl TwInterpreter {
 
         let value = func.call(self, callee_span, &arguments, *close_paren)?;
 
+        trace_evaluated!(expr, value);
+
         Ok(WithSpan {
             span: callee_span.union(close_paren),
             value,
@@ -388,11 +433,14 @@ impl TwInterpreter {
     }
 
     /// Try to resolve a function from an object.
+    #[instrument(skip_all)]
     fn try_get_function(
         &self,
         callee: SpanObject,
         close_paren: &Span,
     ) -> Result<Rc<dyn LoxCallable>> {
+        trace!("Trying to resolve `{}` as a function", callee.value.repr());
+
         match &callee.value {
             LoxObject::NativeFunction(func) => Ok(Rc::clone(func)),
             LoxObject::LoxFunction(func) => Ok(Rc::clone(func) as Rc<dyn LoxCallable>),
@@ -409,34 +457,45 @@ impl TwInterpreter {
     }
 
     /// Evaluate a logical expression by short-circuiting.
+    #[instrument(skip_all)]
     fn evaluate_logical_expression(
         &mut self,
         left: &SpanExpr,
         operator: &WithSpan<LogicalOperator>,
         right: &SpanExpr,
+        expr: &SpanExpr,
     ) -> Result<SpanObject> {
+        trace_evaluating!(expr);
+
         let span = left.span.union(&right.span);
         let left = self.evaluate_expression(left)?;
 
-        match operator.value {
-            LogicalOperator::Or if left.value.is_truthy() => Ok(WithSpan { span, ..left }),
-            LogicalOperator::And if !left.value.is_truthy() => Ok(WithSpan { span, ..left }),
+        let result = match operator.value {
+            LogicalOperator::Or if left.value.is_truthy() => WithSpan { span, ..left },
+            LogicalOperator::And if !left.value.is_truthy() => WithSpan { span, ..left },
             _ => {
                 let right = self.evaluate_expression(right)?;
-                Ok(WithSpan { span, ..right })
+                WithSpan { span, ..right }
             }
-        }
+        };
+
+        trace_evaluated!(expr, result);
+        Ok(result)
     }
 
     /// Evaluate a binary expression.
+    #[instrument(skip_all)]
     fn evaluate_binary_expression(
         &mut self,
         operator: WithSpan<BinaryOperator>,
         left: SpanObject,
         right: SpanObject,
+        expr: &SpanExpr,
     ) -> Result<SpanObject> {
         use BinaryOperator::*;
         use LoxObject::*;
+
+        trace_evaluating!(expr);
 
         let WithSpan {
             span: left_span,
@@ -513,6 +572,11 @@ impl TwInterpreter {
                 BangEqual => Boolean(a != b),
                 _ => unsupported()?,
             },
+            (LoxInstance(a), LoxInstance(b)) => match operator {
+                EqualEqual => Boolean(*a.borrow() == *b.borrow()),
+                BangEqual => Boolean(*a.borrow() != *b.borrow()),
+                _ => unsupported()?,
+            },
             // Guaranteed to be of different types
             _ => match operator {
                 EqualEqual => Boolean(left == right),
@@ -521,17 +585,22 @@ impl TwInterpreter {
             },
         };
 
+        trace_evaluated!(expr, value);
         Ok(WithSpan { span, value })
     }
 
     /// Evaluate a unary expression.
+    #[instrument(skip_all)]
     fn evaluate_unary_expression(
         &mut self,
         operator: WithSpan<UnaryOperator>,
         object: SpanObject,
+        expr: &SpanExpr,
     ) -> Result<SpanObject> {
         use LoxObject::*;
         use UnaryOperator::*;
+
+        trace_evaluating!(expr);
 
         let WithSpan { span, value } = object;
         let WithSpan {
@@ -557,6 +626,7 @@ impl TwInterpreter {
             _ => unsupported()?,
         };
 
+        trace_evaluated!(expr, value);
         Ok(WithSpan { span, value })
     }
 }
