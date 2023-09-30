@@ -11,10 +11,11 @@ use rlox_lib::{
     environment::Environment,
     interpreter::{ErrorOrReturn, Interpreter, Result, RuntimeError},
     object::{LoxObject, SpanObject},
+    pretty_printers::ParenPrinter,
     span::{Span, WithSpan},
 };
 use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
-use tracing::{instrument, trace};
+use tracing::{debug, instrument, trace};
 
 /// A tree-walk Lox interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -125,6 +126,8 @@ impl TwInterpreter {
 
     /// Execute the given statement.
     fn execute_statement(&mut self, stmt: &SpanStmt) -> Result<()> {
+        debug!("Executing statement `{}`", ParenPrinter::print_stmt(stmt));
+
         match &stmt.value {
             Stmt::ClassDecl(name, methods) => self.execute_class_decl(name, methods)?,
             Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,

@@ -2,7 +2,6 @@
 
 use crate::{
     parser::Parser,
-    pretty_printers::ParenPrinter,
     scanner::Scanner,
     span::{LineOffsets, Span},
     tokens::{Token, TokenType},
@@ -133,17 +132,14 @@ impl<T: Interpreter> LoxInterpreter<T> {
     }
 
     /// Run the given Lox code.
-    #[instrument(skip_all)]
     fn run_code(&mut self, code: &str) {
-        debug!(?code);
+        debug!("Running code: ```lox\n{}```", code.trim_start());
 
         let tokens = Scanner::scan_tokens(code);
+        trace!(?tokens);
 
-        debug!(?tokens);
         let stmts = Parser::parse(tokens);
-
-        debug!(?stmts);
-        debug!(parens = %ParenPrinter::print_stmts(&stmts));
+        trace!(?stmts);
 
         self.interpreter.interpret(&stmts);
     }

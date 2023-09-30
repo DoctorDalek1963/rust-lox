@@ -19,7 +19,7 @@ impl ParenPrinter {
     }
 
     /// Print a single statement.
-    fn print_stmt(stmt: &SpanStmt) -> String {
+    pub fn print_stmt(stmt: &SpanStmt) -> String {
         match &stmt.value {
             Stmt::ClassDecl(name, methods) => format!(
                 "class {} {{\n{}\n}}",
