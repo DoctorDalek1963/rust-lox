@@ -137,7 +137,7 @@ impl TwInterpreter {
             Stmt::If(condition, then_branch, else_branch) => {
                 self.execute_if_statement(condition, then_branch, else_branch)?
             }
-            Stmt::Print(expr) => println!("{}", self.evaluate_expression(expr)?.print()),
+            Stmt::Print(expr) => self.execute_print(expr)?,
             Stmt::Return(keyword_span, expr) => self.execute_return(keyword_span, expr)?,
             Stmt::While(condition, body) => self.execute_while_loop(condition, body)?,
             Stmt::Block(stmts) => self.execute_block(stmts, None)?,
@@ -147,11 +147,18 @@ impl TwInterpreter {
     }
 
     /// Execute a class declaration in the current environment.
+    #[instrument(skip_all)]
     fn execute_class_decl(
         &mut self,
         name: &WithSpan<String>,
         methods: &[WithSpan<FunctionOrMethod>],
     ) -> Result<()> {
+        trace!(
+            "Declaring class {} with {} methods",
+            name.value,
+            methods.len()
+        );
+
         self.current_env
             .borrow_mut()
             .define(name.value.clone(), LoxObject::Nil);
@@ -163,6 +170,13 @@ impl TwInterpreter {
                      span: _,
                      value: (method_name, params, _close_paren_span, body),
                  }| {
+                    trace!(
+                        "Declaring method {}.{} with {} parameters",
+                        name.value,
+                        method_name.value,
+                        params.len()
+                    );
+
                     (
                         method_name.value.clone(),
                         Rc::new(LoxFunction::new(
@@ -185,15 +199,21 @@ impl TwInterpreter {
     }
 
     /// Execute a variable declaration in the current environment.
+    #[instrument(skip_all)]
     fn execute_var_decl(
         &mut self,
         name: &WithSpan<String>,
         initializer: &Option<SpanExpr>,
     ) -> Result<()> {
+        trace!("Declaring variable {}", name.value);
+
         let value = match initializer {
             Some(expr) => self.evaluate_expression(expr)?.value,
             None => LoxObject::Nil,
         };
+
+        trace!("Defining variable {} = {}", name.value, value.repr());
+
         self.current_env
             .borrow_mut()
             .define(name.value.clone(), value);
@@ -201,12 +221,19 @@ impl TwInterpreter {
     }
 
     /// Execute a function declaration in the current environment.
+    #[instrument(skip_all)]
     fn execute_fun_decl(
         &mut self,
         name: &WithSpan<String>,
         parameters: &[WithSpan<String>],
         body: &[SpanStmt],
     ) {
+        trace!(
+            "Declaring free function {} with {} parameters",
+            name.value,
+            parameters.len()
+        );
+
         let function = LoxFunction::new(
             name.clone(),
             parameters.to_owned(),
@@ -220,6 +247,7 @@ impl TwInterpreter {
     }
 
     /// Execute an `if` statement.
+    #[instrument(skip_all)]
     fn execute_if_statement(
         &mut self,
         condition: &SpanExpr,
@@ -235,7 +263,15 @@ impl TwInterpreter {
         Ok(())
     }
 
+    /// Execute a print statement.
+    #[instrument(skip_all)]
+    fn execute_print(&mut self, expr: &SpanExpr) -> Result<()> {
+        println!("{}", self.evaluate_expression(expr)?.print());
+        Ok(())
+    }
+
     /// Execute a return statement.
+    #[instrument(skip_all)]
     fn execute_return(&mut self, keyword_span: &Span, expr: &Option<SpanExpr>) -> Result<()> {
         let value = if let Some(expr) = expr {
             self.evaluate_expression(expr)?
@@ -246,10 +282,13 @@ impl TwInterpreter {
             }
         };
 
+        trace!("Returning {} from function", value.value.repr());
+
         Err(ErrorOrReturn::Return(value))
     }
 
     /// Execute a while loop.
+    #[instrument(skip_all)]
     fn execute_while_loop(&mut self, condition: &SpanExpr, body: &SpanStmt) -> Result<()> {
         while self.evaluate_expression(condition)?.is_truthy() {
             self.execute_statement(body)?;
@@ -286,47 +325,11 @@ impl TwInterpreter {
             Expr::Call(callee, arguments, close_paren) => {
                 self.evaluate_function_call(callee, arguments, close_paren, expr)?
             }
-            Expr::Get(expr, ident) => {
-                let object = self.evaluate_expression(expr)?;
-                if let LoxObject::LoxInstance(instance) = object.value {
-                    WithSpan {
-                        span,
-                        value: LoxInstance::get(&instance, ident)?,
-                    }
-                } else {
-                    return Err(RuntimeError {
-                        message: "Only class instances have properties".to_string(),
-                        span,
-                    }
-                    .into());
-                }
-            }
-            Expr::Set(object, ident, r_value) => {
-                let object = self.evaluate_expression(object)?;
-                if let WithSpan {
-                    span: _,
-                    value: LoxObject::LoxInstance(instance),
-                } = object
-                {
-                    let r_value = self.evaluate_expression(r_value)?;
-                    instance
-                        .borrow_mut()
-                        .set(ident.value.clone(), r_value.value.clone());
-                    WithSpan {
-                        span,
-                        value: r_value.value,
-                    }
-                } else {
-                    return Err(RuntimeError {
-                        message: format!(
-                            "Only class instances have fields, not objects of type {}",
-                            object.value.type_name()
-                        ),
-                        span: object.span.union(&ident.span),
-                    }
-                    .into());
-                }
-            }
+            Expr::Get(object_expr, ident) => self.execute_get_expr(object_expr, ident, span)?,
+            Expr::Set(object_expr, ident, r_value_expr) => WithSpan {
+                span,
+                value: self.execute_set_expr(object_expr, ident, r_value_expr)?,
+            },
             Expr::This => WithSpan {
                 span,
                 value: self.look_up_name(&WithSpan {
@@ -360,28 +363,109 @@ impl TwInterpreter {
                     value: name.clone(),
                 })?,
             },
-            Expr::Assign(name, expr) => {
-                let value = self.evaluate_expression(expr)?;
-
-                match self.locals.get(name) {
-                    Some(depth) => Environment::assign_at_depth(
-                        &self.current_env,
-                        *depth,
-                        name,
-                        value.value.clone(),
-                    ),
-                    None => self
-                        .global_env
-                        .borrow_mut()
-                        .assign(name, value.value.clone(), span)?,
-                };
-
-                value
-            }
+            Expr::Assign(name, expr) => self.execute_assign_expr(name, expr, span)?,
         };
 
         trace_evaluated!(expr, result);
         Ok(result)
+    }
+
+    /// Execute a get expression to get a property on an instance.
+    #[instrument(skip_all)]
+    fn execute_get_expr(
+        &mut self,
+        object_expr: &SpanExpr,
+        ident: &WithSpan<String>,
+        span: Span,
+    ) -> Result<SpanObject> {
+        let object = self.evaluate_expression(object_expr)?;
+        trace!(
+            "Trying to get property `{}` on {}",
+            ident.value,
+            object.value.repr()
+        );
+
+        if let LoxObject::LoxInstance(instance) = object.value {
+            Ok(WithSpan {
+                span,
+                value: LoxInstance::get(&instance, ident)?,
+            })
+        } else {
+            Err(RuntimeError {
+                message: "Only class instances have properties".to_string(),
+                span,
+            }
+            .into())
+        }
+    }
+
+    /// Execute a set expression to set a property on an instance.
+    #[instrument(skip_all)]
+    fn execute_set_expr(
+        &mut self,
+        object_expr: &SpanExpr,
+        ident: &WithSpan<String>,
+        r_value_expr: &SpanExpr,
+    ) -> Result<LoxObject> {
+        let object = self.evaluate_expression(object_expr)?;
+        trace!(
+            "Trying to set property `{}` on {}",
+            ident.value,
+            object.value.repr()
+        );
+
+        if let WithSpan {
+            span: _,
+            value: LoxObject::LoxInstance(ref instance),
+        } = object
+        {
+            let r_value = self.evaluate_expression(r_value_expr)?;
+            trace!(
+                "Setting property `{}` on {} to {}",
+                ident.value,
+                object.value.repr(),
+                r_value.value.repr()
+            );
+
+            instance
+                .borrow_mut()
+                .set(ident.value.clone(), r_value.value.clone());
+            Ok(r_value.value)
+        } else {
+            Err(RuntimeError {
+                message: format!(
+                    "Only class instances have fields, not objects of type {}",
+                    object.value.type_name()
+                ),
+                span: object.span.union(&ident.span),
+            }
+            .into())
+        }
+    }
+
+    /// Execute an assignment expression.
+    #[instrument(skip_all)]
+    fn execute_assign_expr(
+        &mut self,
+        name: &WithSpan<String>,
+        expr: &SpanExpr,
+        span: Span,
+    ) -> Result<SpanObject> {
+        let value = self.evaluate_expression(expr)?;
+
+        trace!("Assigning variable {} = {}", name.value, value.repr());
+
+        match self.locals.get(name) {
+            Some(depth) => {
+                Environment::assign_at_depth(&self.current_env, *depth, name, value.value.clone())
+            }
+            None => self
+                .global_env
+                .borrow_mut()
+                .assign(name, value.value.clone(), span)?,
+        };
+
+        Ok(value)
     }
 
     /// Look up the name to resolve it in the [`locals`](Self.locals) map or in the global scope.

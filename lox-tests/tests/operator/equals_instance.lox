@@ -1,0 +1,40 @@
+class Foo {}
+class Bar {}
+
+var foo1 = Foo();
+var foo2 = Foo();
+
+print foo1 == foo2; // expect: true
+print foo2 == foo1; // expect: true
+
+foo1.thing = 1;
+foo2.thing = 2;
+
+var bar1 = Bar();
+var bar2 = Bar();
+
+print bar1 == bar2; // expect: true
+print bar2 == bar1; // expect: true
+
+bar1.thing = 1;
+bar2.thing = 2;
+
+print foo1 == foo1; // expect: true
+print foo1 == foo2; // expect: false
+print foo1 == bar1; // expect: false
+print foo1 == bar2; // expect: false
+
+print foo2 == foo1; // expect: false
+print foo2 == foo2; // expect: true
+print foo2 == bar1; // expect: false
+print foo2 == bar2; // expect: false
+
+print bar1 == foo1; // expect: false
+print bar1 == foo2; // expect: false
+print bar1 == bar1; // expect: true
+print bar1 == bar2; // expect: false
+
+print bar2 == foo1; // expect: false
+print bar2 == foo2; // expect: false
+print bar2 == bar1; // expect: false
+print bar2 == bar2; // expect: true
