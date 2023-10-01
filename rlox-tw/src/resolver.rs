@@ -26,8 +26,8 @@ impl fmt::Display for ResolveError {
 /// A result wrapping a [`ResolveError`].
 type Result<T = (), E = ResolveError> = ::std::result::Result<T, E>;
 
-/// An enum to determine if the [`Resolver`] is currently in a function. Used to detect badly
-/// placed return statements.
+/// An enum to determine if the [`Resolver`] is currently in a function or method. Used to detect
+/// badly placed return statements.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum FunctionType {
     /// Not in a function.
@@ -38,6 +38,17 @@ enum FunctionType {
 
     /// In a method on a class.
     Method,
+}
+
+/// An enum to determine if the [`Resolver`] is currently in a class or subclass. Used to detect
+/// invalid uses of the `this` keyword.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ClassType {
+    /// Not in a class.
+    None,
+
+    /// In a class that doesn't inherit from any other classes.
+    Class,
 }
 
 /// An enum to distinguish different things that a name could refer to. Used for warning reporting.
@@ -96,6 +107,9 @@ pub struct Resolver {
 
     /// The type of function that we're currently inside.
     current_function: FunctionType,
+
+    /// The type of class that we're currently in.
+    current_class: ClassType,
 }
 
 impl Resolver {
@@ -116,6 +130,7 @@ impl Resolver {
             scopes: Vec::new(),
             locals: HashMap::new(),
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -137,6 +152,9 @@ impl Resolver {
                 self.end_scope();
             }
             Stmt::ClassDecl(name, methods) => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
+
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
                 self.define_name(&name.value);
 
@@ -167,6 +185,7 @@ impl Resolver {
                 }
 
                 self.end_scope();
+                self.current_class = enclosing_class;
             }
             Stmt::VarDecl(name, initializer) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
@@ -251,10 +270,18 @@ impl Resolver {
                 self.resolve_expr(value)?;
                 self.resolve_expr(object)?;
             }
-            Expr::This => self.resolve_local(WithSpan {
-                span: expr.span,
-                value: String::from("this"),
-            }),
+            Expr::This => {
+                if self.current_class == ClassType::None {
+                    return Err(ResolveError {
+                        message: "Cannot use `this` outside of a class".to_string(),
+                        span: expr.span,
+                    });
+                }
+                self.resolve_local(WithSpan {
+                    span: expr.span,
+                    value: String::from("this"),
+                });
+            }
             Expr::Grouping(expr) | Expr::Unary(_, expr) => self.resolve_expr(expr)?,
             Expr::Nil | Expr::Boolean(_) | Expr::String(_) | Expr::Number(_) => (),
         }
