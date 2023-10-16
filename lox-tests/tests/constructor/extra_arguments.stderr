@@ -1,0 +1,5 @@
+ERROR: Expected 2 arguments in function call but got 4
+ --> 8:11
+  |
+8 | var foo = Foo(1, 2, 3, 4); // expect runtime error: Expected 2 arguments but got 4.
+  |           ^-------------^

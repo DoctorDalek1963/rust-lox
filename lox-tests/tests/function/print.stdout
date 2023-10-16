@@ -1,2 +1,2 @@
-<fn "foo">
-<native fn "clock">
+<fn foo>
+<native fn clock>
