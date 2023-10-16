@@ -36,6 +36,9 @@ enum FunctionType {
     /// In a free function.
     Function,
 
+    /// In the `init` method on a class.
+    InitMethod,
+
     /// In a method on a class.
     Method,
 }
@@ -178,10 +181,14 @@ impl Resolver {
                 for method in methods {
                     let WithSpan {
                         span: _,
-                        value: (_method_name, params, _close_paren_span, body),
+                        value: (method_name, params, _close_paren_span, body),
                     } = method;
-                    let declaration = FunctionType::Method;
-                    self.resolve_function(params, body, declaration)?;
+                    let function_type = if method_name.value == "init" {
+                        FunctionType::InitMethod
+                    } else {
+                        FunctionType::Method
+                    };
+                    self.resolve_function(params, body, function_type)?;
                 }
 
                 self.end_scope();
@@ -221,6 +228,13 @@ impl Resolver {
                 }
 
                 if let Some(expr) = expr {
+                    if self.current_function == FunctionType::InitMethod {
+                        return Err(ResolveError {
+                            message: "Cannot return a value from an `init` method".to_string(),
+                            span: stmt.span,
+                        });
+                    }
+
                     self.resolve_expr(expr)?;
                 }
             }

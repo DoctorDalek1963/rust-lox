@@ -187,6 +187,7 @@ impl TwInterpreter {
                             params.clone(),
                             body.clone(),
                             Rc::clone(&self.current_env),
+                            method_name.value == "init",
                         )),
                     )
                 },
@@ -223,7 +224,7 @@ impl TwInterpreter {
         Ok(())
     }
 
-    /// Execute a function declaration in the current environment.
+    /// Execute a free function declaration in the current environment.
     #[instrument(skip_all)]
     fn execute_fun_decl(
         &mut self,
@@ -242,6 +243,7 @@ impl TwInterpreter {
             parameters.to_owned(),
             body.to_owned(),
             self.get_current_env(),
+            false,
         );
         self.current_env.borrow_mut().define(
             name.value.clone(),

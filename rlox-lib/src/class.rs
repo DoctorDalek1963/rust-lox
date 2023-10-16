@@ -37,20 +37,30 @@ impl LoxCallable for Rc<LoxClass> {
     }
 
     fn arity(&self) -> u8 {
-        // TODO: Read init method
-        0
+        self.find_method("init")
+            .map_or(0, |init_method| init_method.arity())
     }
 
     fn call(
         &self,
-        _interpreter: &mut dyn Interpreter,
-        _callee_span: Span,
-        _arguments: &[SpanObject],
-        _close_paren: Span,
+        interpreter: &mut dyn Interpreter,
+        callee_span: Span,
+        arguments: &[SpanObject],
+        close_paren: Span,
     ) -> Result<LoxObject, RuntimeError> {
-        Ok(LoxObject::LoxInstance(Rc::new(RefCell::new(
-            LoxInstance::new(Rc::clone(self)),
-        ))))
+        let instance =
+            LoxObject::LoxInstance(Rc::new(RefCell::new(LoxInstance::new(Rc::clone(self)))));
+
+        if let Some(init_method) = self.find_method("init") {
+            init_method.bind_this(instance.clone()).call(
+                interpreter,
+                callee_span,
+                arguments,
+                close_paren,
+            )?;
+        }
+
+        Ok(instance)
     }
 }
 
