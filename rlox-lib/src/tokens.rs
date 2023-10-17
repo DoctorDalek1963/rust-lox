@@ -4,7 +4,7 @@ use crate::span::Span;
 use std::fmt;
 
 /// A single token.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Token<'s> {
     /// The type of the token.
     pub token_type: TokenType,
@@ -17,6 +17,22 @@ pub struct Token<'s> {
 
     /// The span of the token.
     pub span: Span,
+}
+
+impl fmt::Debug for Token<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug_struct = f.debug_struct("Token");
+        debug_struct
+            .field("token_type", &self.token_type)
+            .field("lexeme", &self.lexeme)
+            .field("literal", &self.literal);
+
+        if cfg!(debug_assertions) {
+            debug_struct.field("span", &self.span);
+        }
+
+        debug_struct.finish()
+    }
 }
 
 impl fmt::Display for Token<'_> {

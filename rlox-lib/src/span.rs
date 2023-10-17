@@ -56,10 +56,14 @@ impl<T: Copy> Copy for WithSpan<T> {}
 
 impl<T: fmt::Debug> fmt::Debug for WithSpan<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WithSpan")
-            .field("value", &self.value)
-            .field("span", &self.span)
-            .finish()
+        if cfg!(debug_assertions) {
+            f.debug_struct("WithSpan")
+                .field("value", &self.value)
+                .field("span", &self.span)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.value)
+        }
     }
 }
 
