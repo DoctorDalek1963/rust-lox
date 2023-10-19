@@ -159,7 +159,7 @@ impl<'s> Parser<'s> {
         })
     }
 
-    /// classDecl → "class" IDENTIFIER "{" function* "}" ;
+    /// classDecl → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn parse_class_decl(&mut self) -> ParseResult<'s, SpanStmt> {
         let class_keyword_span = self.previous().unwrap().span;
         let name = {
@@ -172,6 +172,20 @@ impl<'s> Parser<'s> {
                 span,
                 value: lexeme.to_string(),
             }
+        };
+
+        let superclass_name = if self.match_tokens([TokenType::Less]) {
+            let Token { lexeme, span, .. } = self.consume(
+                TokenType::Identifier,
+                self.previous().map(|t| t.span),
+                "Expected superclass name after '<'".to_string(),
+            )?;
+            Some(WithSpan {
+                span,
+                value: lexeme.to_string(),
+            })
+        } else {
+            None
         };
 
         let left_brace_span = self
@@ -203,7 +217,7 @@ impl<'s> Parser<'s> {
 
         Ok(WithSpan {
             span: class_keyword_span.union(&right_brace_span),
-            value: Stmt::ClassDecl(name, methods),
+            value: Stmt::ClassDecl(name, superclass_name, methods),
         })
     }
 

@@ -3,13 +3,26 @@
 use std::{cmp, fmt, hash::Hash, ops::Deref};
 
 /// A section of source code, measured as indices into source code.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Span {
     /// The index of the start of the span.
     pub start: usize,
 
     /// The index of the end of the span (inclusive).
     pub end: usize,
+}
+
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if cfg!(debug_assertions) {
+            f.debug_struct("Span")
+                .field("start", &self.start)
+                .field("end", &self.end)
+                .finish()
+        } else {
+            write!(f, "")
+        }
+    }
 }
 
 impl Span {

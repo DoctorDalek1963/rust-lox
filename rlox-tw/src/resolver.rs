@@ -154,12 +154,22 @@ impl Resolver {
                 self.resolve_stmts(body)?;
                 self.end_scope();
             }
-            Stmt::ClassDecl(name, methods) => {
+            Stmt::ClassDecl(name, superclass_name, methods) => {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassType::Class;
 
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
                 self.define_name(&name.value);
+
+                if let Some(superclass_name) = superclass_name {
+                    if superclass_name.value == name.value {
+                        return Err(ResolveError {
+                            message: "A class cannot inherit from itself".to_string(),
+                            span: name.span.union(&superclass_name.span),
+                        });
+                    }
+                    self.resolve_local(superclass_name.clone());
+                }
 
                 self.begin_scope();
                 if let Some(scope) = self.scopes.last_mut() {

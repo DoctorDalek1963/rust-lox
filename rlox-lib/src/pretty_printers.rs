@@ -21,9 +21,16 @@ impl ParenPrinter {
     /// Print a single statement.
     pub fn print_stmt(stmt: &SpanStmt) -> String {
         match &stmt.value {
-            Stmt::ClassDecl(name, methods) => format!(
-                "class {} {{\n{}\n}}",
+            Stmt::ClassDecl(name, superclass_name, methods) => format!(
+                "class {}{} {{\n{}\n}}",
                 name.value,
+                superclass_name.as_ref().map_or_else(
+                    || String::new(),
+                    |WithSpan {
+                         value: name,
+                         span: _,
+                     }| format!(" < {name}")
+                ),
                 methods
                     .iter()
                     .map(

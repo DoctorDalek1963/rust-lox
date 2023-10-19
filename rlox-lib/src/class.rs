@@ -15,19 +15,35 @@ pub struct LoxClass {
     /// The name of the class, including the span where it was defined.
     name: WithSpan<String>,
 
+    /// The superclass of this class.
+    superclass: Option<Rc<LoxClass>>,
+
     /// The methods of this class.
     methods: HashMap<String, Rc<LoxFunction>>,
 }
 
 impl LoxClass {
     /// Create a new Lox class.
-    pub fn new(name: WithSpan<String>, methods: HashMap<String, Rc<LoxFunction>>) -> Self {
-        Self { name, methods }
+    pub fn new(
+        name: WithSpan<String>,
+        superclass: Option<Rc<LoxClass>>,
+        methods: HashMap<String, Rc<LoxFunction>>,
+    ) -> Self {
+        Self {
+            name,
+            superclass,
+            methods,
+        }
     }
 
     /// Try to find the method with the given name on this class.
     fn find_method(&self, name: &str) -> Option<&Rc<LoxFunction>> {
-        self.methods.get(name)
+        self.methods.get(name).or_else(|| {
+            self.superclass
+                .as_ref()
+                .map(|class| class.find_method(name))
+                .flatten()
+        })
     }
 }
 

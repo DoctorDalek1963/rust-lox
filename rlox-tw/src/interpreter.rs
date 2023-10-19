@@ -129,7 +129,9 @@ impl TwInterpreter {
         debug!("Executing statement `{}`", ParenPrinter::print_stmt(stmt));
 
         match &stmt.value {
-            Stmt::ClassDecl(name, methods) => self.execute_class_decl(name, methods)?,
+            Stmt::ClassDecl(name, superclass_name, methods) => {
+                self.execute_class_decl(name, superclass_name.as_ref(), methods)?
+            }
             Stmt::VarDecl(name, initializer) => self.execute_var_decl(name, initializer)?,
             Stmt::FunDecl((name, parameters, _, body)) => {
                 self.execute_fun_decl(name, parameters, body)
@@ -154,19 +156,49 @@ impl TwInterpreter {
     fn execute_class_decl(
         &mut self,
         name: &WithSpan<String>,
+        superclass_name: Option<&WithSpan<String>>,
         methods: &[WithSpan<FunctionOrMethod>],
     ) -> Result<()> {
-        trace!(
-            "Declaring class {} with {} methods",
-            name.value,
-            methods.len()
-        );
+        let superclass: Option<Rc<LoxClass>> = if let Some(superclass_name) = superclass_name {
+            let WithSpan { span, value } = superclass_name.clone();
+            let superclass = self.evaluate_expression(&WithSpan {
+                span,
+                value: Expr::Variable(value),
+            })?;
+
+            match superclass.value {
+                LoxObject::LoxClass(class) => {
+                    trace!(
+                        "Declaring class {} (subclass of {}) with {} methods",
+                        name.value,
+                        class.name(),
+                        methods.len()
+                    );
+
+                    Some(class)
+                }
+                _ => {
+                    return Err(ErrorOrReturn::Error(RuntimeError {
+                        message: "Superclass must be a valid class".to_string(),
+                        span,
+                    }));
+                }
+            }
+        } else {
+            trace!(
+                "Declaring class {} with {} methods",
+                name.value,
+                methods.len()
+            );
+
+            None
+        };
 
         self.current_env
             .borrow_mut()
             .define(name.value.clone(), LoxObject::Nil);
 
-        let methods_map = methods
+        let methods_map: HashMap<String, Rc<LoxFunction>> = methods
             .iter()
             .map(
                 |WithSpan {
@@ -194,7 +226,11 @@ impl TwInterpreter {
             )
             .collect();
 
-        let class = LoxObject::LoxClass(Rc::new(LoxClass::new(name.clone(), methods_map)));
+        let class = LoxObject::LoxClass(Rc::new(LoxClass::new(
+            name.clone(),
+            superclass,
+            methods_map,
+        )));
 
         self.current_env
             .borrow_mut()
