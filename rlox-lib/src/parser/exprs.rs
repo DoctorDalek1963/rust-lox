@@ -349,44 +349,41 @@ impl<'s> Parser<'s> {
         if self.match_tokens([
             True, False, Nil, This, Number, String, Identifier, LeftParen,
         ]) {
-            let previous = self.previous();
+            let previous = self.previous().unwrap();
+            let mut span = previous.span;
 
-            let mut span = match previous {
-                Some(Token { span, .. }) => *span,
-                _ => unreachable!(),
-            };
             let value = match previous {
-                Some(Token {
+                Token {
                     token_type: True, ..
-                }) => Expr::Boolean(true),
-                Some(Token {
+                } => Expr::Boolean(true),
+                Token {
                     token_type: False, ..
-                }) => Expr::Boolean(false),
-                Some(Token {
+                } => Expr::Boolean(false),
+                Token {
                     token_type: Nil, ..
-                }) => Expr::Nil,
-                Some(Token {
+                } => Expr::Nil,
+                Token {
                     token_type: This, ..
-                }) => Expr::This,
-                Some(Token {
+                } => Expr::This,
+                Token {
                     token_type: Number,
                     literal: Some(TokenLiteral::Number(num)),
                     ..
-                }) => Expr::Number(*num),
-                Some(Token {
+                } => Expr::Number(*num),
+                Token {
                     token_type: String,
                     literal: Some(TokenLiteral::String(string)),
                     ..
-                }) => Expr::String(string.to_string()),
-                Some(Token {
+                } => Expr::String(string.to_string()),
+                Token {
                     token_type: Identifier,
                     lexeme,
                     ..
-                }) => Expr::Variable(lexeme.to_string()),
-                Some(Token {
+                } => Expr::Variable(lexeme.to_string()),
+                Token {
                     token_type: LeftParen,
                     ..
-                }) => {
+                } => {
                     let expr = self.parse_expression()?;
                     let right_paren_span = self
                         .consume(
@@ -395,10 +392,12 @@ impl<'s> Parser<'s> {
                             "Expected ')' at end of grouped expression".to_string(),
                         )?
                         .span;
-                    span = span.union(&right_paren_span);
+                    span.mut_union(&right_paren_span);
                     Expr::Grouping(Box::new(expr))
                 }
-                _ => unreachable!(),
+                _ => unreachable!(
+                    "match_tokens() will only return a token with a TokenType that we expected"
+                ),
             };
 
             Ok(WithSpan { span, value })

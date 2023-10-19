@@ -34,6 +34,11 @@ impl Span {
         }
     }
 
+    /// Join this span with another one in-place.
+    pub fn mut_union(&mut self, other: &Self) {
+        *self = self.union(other);
+    }
+
     pub fn between(left: &Self, right: &Self) -> Self {
         assert!(
             left.start <= right.end,

@@ -82,7 +82,7 @@ impl<'s> Parser<'s> {
 
         let mut span = name.span;
         if let Some(prev) = previous_span {
-            span = span.union(&prev);
+            span.mut_union(&prev);
         }
 
         self.consume(
@@ -151,7 +151,7 @@ impl<'s> Parser<'s> {
         .span;
 
         let stmts = self.parse_block()?;
-        span = span.union(&stmts.span);
+        span.mut_union(&stmts.span);
 
         Ok(WithSpan {
             span,
@@ -241,7 +241,7 @@ impl<'s> Parser<'s> {
             _ => var_keyword_span,
         };
 
-        span = span.union(
+        span.mut_union(
             &self
                 .consume(
                     TokenType::Semicolon,
@@ -310,10 +310,10 @@ impl<'s> Parser<'s> {
                 "Expected '(' after 'if'".to_string(),
             )?
             .span;
-        full_span = full_span.union(&left_paren_span);
+        full_span.mut_union(&left_paren_span);
 
         let condition = self.parse_expression()?;
-        full_span = full_span.union(&condition.span);
+        full_span.mut_union(&condition.span);
 
         let right_paren_span = self
             .consume(
@@ -322,14 +322,14 @@ impl<'s> Parser<'s> {
                 "Expected ')' after if condition".to_string(),
             )?
             .span;
-        full_span = full_span.union(&right_paren_span);
+        full_span.mut_union(&right_paren_span);
 
         let then_branch = self.parse_statement()?;
-        full_span = full_span.union(&then_branch.span);
+        full_span.mut_union(&then_branch.span);
 
         let else_branch = if self.match_tokens([TokenType::Else]) {
             let stmt = self.parse_statement()?;
-            full_span = full_span.union(&stmt.span);
+            full_span.mut_union(&stmt.span);
             Some(stmt)
         } else {
             None
@@ -397,10 +397,10 @@ impl<'s> Parser<'s> {
                 "Expected '(' after 'while'".to_string(),
             )?
             .span;
-        span = span.union(&left_paren_span);
+        span.mut_union(&left_paren_span);
 
         let condition = self.parse_expression()?;
-        span = span.union(&condition.span);
+        span.mut_union(&condition.span);
 
         let right_paren_span = self
             .consume(
@@ -409,10 +409,10 @@ impl<'s> Parser<'s> {
                 "Expected ')' after while condition".to_string(),
             )?
             .span;
-        span = span.union(&right_paren_span);
+        span.mut_union(&right_paren_span);
 
         let stmt = self.parse_statement()?;
-        span = span.union(&stmt.span);
+        span.mut_union(&stmt.span);
 
         Ok(WithSpan {
             span,
@@ -440,13 +440,13 @@ impl<'s> Parser<'s> {
             Some(self.parse_expr_statement()?)
         };
         if let Some(init) = &initializer {
-            span = span.union(&init.span);
+            span.mut_union(&init.span);
         }
 
         let (condition, cond_span) = if !self.check(TokenType::Semicolon) {
             let expr = self.parse_expression()?;
             let expr_span = expr.span;
-            span = span.union(&expr.span);
+            span.mut_union(&expr.span);
             (Some(expr), expr_span)
         } else {
             let end = self.previous().unwrap().span.end;
@@ -460,7 +460,7 @@ impl<'s> Parser<'s> {
 
         let increment = if !self.check(TokenType::RightParen) {
             let expr = self.parse_expression()?;
-            span = span.union(&expr.span);
+            span.mut_union(&expr.span);
             Some(expr)
         } else {
             None
@@ -472,7 +472,7 @@ impl<'s> Parser<'s> {
         )?;
 
         let mut body = self.parse_statement()?;
-        span = span.union(&body.span);
+        span.mut_union(&body.span);
 
         if let Some(increment) = increment {
             let increment: SpanStmt = WithSpan {
@@ -517,7 +517,7 @@ impl<'s> Parser<'s> {
 
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             if let Some(stmt) = self.parse_declaration() {
-                span = span.union(&stmt.span);
+                span.mut_union(&stmt.span);
                 stmts.push(stmt);
             }
         }
@@ -529,7 +529,7 @@ impl<'s> Parser<'s> {
                 "Expected '}' after block".to_string(),
             )?
             .span;
-        span = span.union(&right_brace_span);
+        span.mut_union(&right_brace_span);
 
         Ok(WithSpan { span, value: stmts })
     }
