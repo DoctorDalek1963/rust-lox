@@ -342,12 +342,13 @@ impl<'s> Parser<'s> {
         })
     }
 
-    /// primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+    /// primary → NUMBER | STRING | "true" | "false" | "nil"
+    ///         | "(" expression ")" | "super" "." IDENTIFIER ;
     fn parse_primary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
         if self.match_tokens([
-            True, False, Nil, This, Number, String, Identifier, LeftParen,
+            True, False, Nil, This, Super, Number, String, Identifier, LeftParen,
         ]) {
             let previous = self.previous().unwrap();
             let mut span = previous.span;
@@ -365,6 +366,32 @@ impl<'s> Parser<'s> {
                 Token {
                     token_type: This, ..
                 } => Expr::This,
+                Token {
+                    token_type: Super, ..
+                } => {
+                    let super_keyword_span = self.previous().unwrap().span;
+                    let dot = self.consume(
+                        TokenType::Dot,
+                        Some(span),
+                        "Expected '.' after 'super'".to_string(),
+                    )?;
+                    let Token {
+                        lexeme,
+                        span: method_span,
+                        ..
+                    } = self.consume(
+                        TokenType::Identifier,
+                        Some(span.union(&dot.span)),
+                        "Expected method name after 'super'".to_string(),
+                    )?;
+                    let method_name = WithSpan {
+                        span: method_span,
+                        value: lexeme.to_string(),
+                    };
+
+                    span.mut_union(&method_name.span);
+                    Expr::Super(super_keyword_span, method_name)
+                }
                 Token {
                     token_type: Number,
                     literal: Some(TokenLiteral::Number(num)),

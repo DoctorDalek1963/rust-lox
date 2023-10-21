@@ -10,7 +10,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 /// The environment of defined values in the current interpreter session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
-    /// The enclosing environment.
+    /// The environment being enclosed by this one.
     pub enclosing: Option<Rc<RefCell<Environment>>>,
 
     /// A map of variable names to their values.
@@ -30,6 +30,25 @@ impl Environment {
             enclosing,
             values: HashMap::new(),
         }
+    }
+
+    /// Mutate this environment to be a new empty one, enclosing the old one.
+    pub fn wrap_with_new_env(this_env: &mut Rc<RefCell<Self>>) {
+        *this_env = Rc::new(RefCell::new(Self::enclosing(Some(core::mem::take(
+            this_env,
+        )))));
+    }
+
+    /// Pop this environment and replace it with the environment that it was previously enclosing,
+    /// panicking if so such environment exists.
+    pub fn pop_env(this_env: &mut Rc<RefCell<Self>>) {
+        let other_env = if let Some(other_env) = &this_env.borrow().enclosing {
+            Rc::clone(other_env)
+        } else {
+            panic!("Environment::pop_env called with an environment that enclosed nothing");
+        };
+
+        *this_env = other_env;
     }
 
     /// Define a new variable with the given value.

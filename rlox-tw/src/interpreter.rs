@@ -14,7 +14,7 @@ use rlox_lib::{
     pretty_printers::ParenPrinter,
     span::{Span, WithSpan},
 };
-use std::{cell::RefCell, collections::HashMap, mem, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use tracing::{debug, instrument, trace};
 
 /// A tree-walk Lox interpreter.
@@ -80,18 +80,14 @@ impl Interpreter for TwInterpreter {
         stmts: &[SpanStmt],
         environment: Option<Rc<RefCell<Environment>>>,
     ) -> Result<()> {
-        let original_env = Rc::clone(&self.current_env);
-
         if let Some(environment) = environment {
             self.current_env = environment;
         } else {
-            self.current_env = Rc::new(RefCell::new(Environment::enclosing(Some(mem::take(
-                &mut self.current_env,
-            )))));
+            Environment::wrap_with_new_env(&mut self.current_env);
         }
 
         let result = self.execute_statements(stmts);
-        self.current_env = original_env;
+        Environment::pop_env(&mut self.current_env);
         result
     }
 }
@@ -198,6 +194,14 @@ impl TwInterpreter {
             .borrow_mut()
             .define(name.value.clone(), LoxObject::Nil);
 
+        if let Some(superclass) = &superclass {
+            Environment::wrap_with_new_env(&mut self.current_env);
+            self.current_env.borrow_mut().define(
+                String::from("super"),
+                LoxObject::LoxClass(Rc::clone(superclass)),
+            );
+        }
+
         let methods_map: HashMap<String, Rc<LoxFunction>> = methods
             .iter()
             .map(
@@ -226,11 +230,17 @@ impl TwInterpreter {
             )
             .collect();
 
+        let superclass_is_some = superclass.is_some();
+
         let class = LoxObject::LoxClass(Rc::new(LoxClass::new(
             name.clone(),
             superclass,
             methods_map,
         )));
+
+        if superclass_is_some {
+            Environment::pop_env(&mut self.current_env);
+        }
 
         self.current_env
             .borrow_mut()
@@ -371,6 +381,14 @@ impl TwInterpreter {
                 span,
                 value: self.execute_set_expr(object_expr, ident, r_value_expr)?,
             },
+            Expr::Super(super_keyword_span, method_name) => WithSpan {
+                span,
+                value: LoxObject::LoxFunction(self.evaluate_super_access(
+                    *super_keyword_span,
+                    span,
+                    &method_name.value,
+                )?),
+            },
             Expr::This => WithSpan {
                 span,
                 value: self.look_up_name(&WithSpan {
@@ -481,6 +499,51 @@ impl TwInterpreter {
                 span: object.span.union(&ident.span),
             }
             .into())
+        }
+    }
+
+    /// Evaluate an access of a method on `super`.
+    #[instrument(skip_all)]
+    fn evaluate_super_access(
+        &mut self,
+        super_keyword_span: Span,
+        full_span: Span,
+        method_name: &str,
+    ) -> Result<Rc<LoxFunction>> {
+        trace!("Trying to get method {method_name} on `super`");
+        let super_keyword = WithSpan {
+            span: super_keyword_span,
+            value: String::from("super"),
+        };
+
+        let distance = *self
+            .locals
+            .get(&super_keyword)
+            .expect("`super` should be defined");
+
+        let LoxObject::LoxClass(superclass) =
+            Environment::get_at_depth(&self.current_env, distance, &super_keyword)
+        else {
+            panic!("Finding `super` yielded an object which was not a class");
+        };
+
+        let LoxObject::LoxInstance(object) = Environment::get_at_depth(
+            &self.current_env,
+            distance - 1,
+            &WithSpan {
+                span: full_span,
+                value: String::from("this"),
+            },
+        ) else {
+            panic!("Finding `this` yielded an object which was not an instance");
+        };
+
+        match superclass.find_method(method_name) {
+            None => Err(ErrorOrReturn::Error(RuntimeError {
+                message: format!("Undefined property `{method_name}` on superclass"),
+                span: full_span,
+            })),
+            Some(method) => Ok(method.bind_this(LoxObject::LoxInstance(object))),
         }
     }
 

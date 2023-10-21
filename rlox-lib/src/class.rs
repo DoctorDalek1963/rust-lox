@@ -37,7 +37,7 @@ impl LoxClass {
     }
 
     /// Try to find the method with the given name on this class.
-    fn find_method(&self, name: &str) -> Option<&Rc<LoxFunction>> {
+    pub fn find_method(&self, name: &str) -> Option<&Rc<LoxFunction>> {
         self.methods.get(name).or_else(|| {
             self.superclass
                 .as_ref()

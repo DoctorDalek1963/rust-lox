@@ -133,12 +133,13 @@ impl ParenPrinter {
                 ident.value,
                 Self::print_expr(value)
             ),
+            Expr::Super(_, method_name) => format!("(super.{})", method_name.value),
             Expr::This => String::from("this"),
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
             Expr::Logical(left, operator, right) => format!(
-                "{} {} {}",
+                "({} {} {})",
                 Self::print_expr(left),
                 operator.value,
                 Self::print_expr(right)
@@ -147,7 +148,7 @@ impl ParenPrinter {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
             Expr::Variable(name) => name.to_string(),
-            Expr::Assign(name, expr) => format!("{} = {}", name.value, Self::print_expr(expr)),
+            Expr::Assign(name, expr) => format!("({} = {})", name.value, Self::print_expr(expr)),
         }
     }
 }

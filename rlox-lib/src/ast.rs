@@ -106,8 +106,11 @@ pub enum Expr {
     /// (object, identifier, new_value).
     Set(Box<SpanExpr>, WithSpan<String>, Box<SpanExpr>),
 
-    /// `this`.
+    /// `this` keyword.
     This,
+
+    /// (super_keyword_span, method_name).
+    Super(Span, WithSpan<String>),
 
     /// Parens around expression.
     Grouping(Box<SpanExpr>),

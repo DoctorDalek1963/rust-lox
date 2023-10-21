@@ -52,6 +52,9 @@ enum ClassType {
 
     /// In a class that doesn't inherit from any other classes.
     Class,
+
+    /// In a class that inherits from some other class.
+    Subclass,
 }
 
 /// An enum to distinguish different things that a name could refer to. Used for warning reporting.
@@ -168,7 +171,19 @@ impl Resolver {
                             span: name.span.union(&superclass_name.span),
                         });
                     }
+                    self.current_class = ClassType::Subclass;
                     self.resolve_local(superclass_name.clone());
+
+                    self.begin_scope();
+                    self.scopes.last_mut().unwrap().insert(
+                        String::from("super"),
+                        ScopeValue {
+                            declaration: superclass_name.span,
+                            value_type: ScopeValueType::Class,
+                            defined: true,
+                            used: true,
+                        },
+                    );
                 }
 
                 self.begin_scope();
@@ -202,6 +217,10 @@ impl Resolver {
                 }
 
                 self.end_scope();
+                if superclass_name.is_some() {
+                    self.end_scope();
+                }
+
                 self.current_class = enclosing_class;
             }
             Stmt::VarDecl(name, initializer) => {
@@ -293,6 +312,24 @@ impl Resolver {
             Expr::Set(object, _, value) => {
                 self.resolve_expr(value)?;
                 self.resolve_expr(object)?;
+            }
+            Expr::Super(keyword_span, _) => {
+                if self.current_class == ClassType::None {
+                    return Err(ResolveError {
+                        message: "Cannot use `super` outside of a class".to_string(),
+                        span: expr.span,
+                    });
+                } else if self.current_class != ClassType::Subclass {
+                    return Err(ResolveError {
+                        message: "Cannot use `super` in a class with no superclass".to_string(),
+                        span: expr.span,
+                    });
+                }
+
+                self.resolve_local(WithSpan {
+                    span: *keyword_span,
+                    value: String::from("super"),
+                });
             }
             Expr::This => {
                 if self.current_class == ClassType::None {
