@@ -1,0 +1,5 @@
+ERROR: Superclass must be a valid class
+ --> 2:13
+  |
+2 | class Foo < Nil {} // expect runtime error: Superclass must be a class.
+  |             ^-^

@@ -1,0 +1,5 @@
+ERROR: Expected '.' after 'super'
+ --> 8:6
+  |
+8 |     (super).method();
+  |      ^----^

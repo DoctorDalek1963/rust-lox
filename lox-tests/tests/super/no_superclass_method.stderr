@@ -1,0 +1,5 @@
+ERROR: Undefined property `doesNotExist` on superclass
+ --> 5:5
+  |
+5 |     super.doesNotExist(1); // expect runtime error: Undefined property 'doesNotExist'.
+  |     ^----------------^

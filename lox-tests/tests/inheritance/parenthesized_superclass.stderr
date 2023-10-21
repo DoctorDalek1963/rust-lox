@@ -1,0 +1,5 @@
+ERROR: Expected superclass name after '<'
+ --> 4:11
+  |
+4 | class Bar < (Foo) {}
+  |           ^-^
