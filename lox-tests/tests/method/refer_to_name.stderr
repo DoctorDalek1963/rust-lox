@@ -1,0 +1,5 @@
+ERROR: Undefined variable name 'method'
+ --> 3:11
+  |
+3 |     print method; // expect runtime error: Undefined variable 'method'.
+  |           ^----^

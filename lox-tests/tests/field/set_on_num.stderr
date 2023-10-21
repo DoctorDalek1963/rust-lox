@@ -1,0 +1,5 @@
+ERROR: Only class instances have fields, not objects of type number
+ --> 1:1
+  |
+1 | 123.foo = "value"; // expect runtime error: Only instances have fields.
+  | ^-----^

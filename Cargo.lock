@@ -715,6 +715,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "similar"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
+
+[[package]]
 name = "smallvec"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -767,6 +773,7 @@ dependencies = [
  "num_cpus",
  "rlox-lib",
  "rlox-tw",
+ "similar",
  "strip-ansi",
  "thiserror",
  "threadpool",

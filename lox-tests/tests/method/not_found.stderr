@@ -1,0 +1,5 @@
+ERROR: No property 'unknown' on instance
+ --> 3:7
+  |
+3 | Foo().unknown(); // expect runtime error: Undefined property 'unknown'.
+  |       ^-----^

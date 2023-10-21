@@ -26,8 +26,8 @@ impl fmt::Display for ResolveError {
 /// A result wrapping a [`ResolveError`].
 type Result<T = (), E = ResolveError> = ::std::result::Result<T, E>;
 
-/// An enum to determine if the [`Resolver`] is currently in a function. Used to detect badly
-/// placed return statements.
+/// An enum to determine if the [`Resolver`] is currently in a function or method. Used to detect
+/// badly placed return statements.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum FunctionType {
     /// Not in a function.
@@ -35,14 +35,35 @@ enum FunctionType {
 
     /// In a free function.
     Function,
+
+    /// In the `init` method on a class.
+    InitMethod,
+
+    /// In a method on a class.
+    Method,
+}
+
+/// An enum to determine if the [`Resolver`] is currently in a class or subclass. Used to detect
+/// invalid uses of the `this` keyword.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ClassType {
+    /// Not in a class.
+    None,
+
+    /// In a class that doesn't inherit from any other classes.
+    Class,
+
+    /// In a class that inherits from some other class.
+    Subclass,
 }
 
 /// An enum to distinguish different things that a name could refer to. Used for warning reporting.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum ScopeValueType {
-    Variable,
+    Class,
     Function,
     Parameter,
+    Variable,
 }
 
 /// A value for the [`scopes`](Resolver.scopes) map.
@@ -92,6 +113,9 @@ pub struct Resolver {
 
     /// The type of function that we're currently inside.
     current_function: FunctionType,
+
+    /// The type of class that we're currently in.
+    current_class: ClassType,
 }
 
 impl Resolver {
@@ -112,6 +136,7 @@ impl Resolver {
             scopes: Vec::new(),
             locals: HashMap::new(),
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -132,6 +157,72 @@ impl Resolver {
                 self.resolve_stmts(body)?;
                 self.end_scope();
             }
+            Stmt::ClassDecl(name, superclass_name, methods) => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
+
+                self.declare_name(name.clone(), stmt.span, ScopeValueType::Class)?;
+                self.define_name(&name.value);
+
+                if let Some(superclass_name) = superclass_name {
+                    if superclass_name.value == name.value {
+                        return Err(ResolveError {
+                            message: "A class cannot inherit from itself".to_string(),
+                            span: name.span.union(&superclass_name.span),
+                        });
+                    }
+                    self.current_class = ClassType::Subclass;
+                    self.resolve_local(superclass_name.clone());
+
+                    self.begin_scope();
+                    self.scopes.last_mut().unwrap().insert(
+                        String::from("super"),
+                        ScopeValue {
+                            declaration: superclass_name.span,
+                            value_type: ScopeValueType::Class,
+                            defined: true,
+                            used: true,
+                        },
+                    );
+                }
+
+                self.begin_scope();
+                if let Some(scope) = self.scopes.last_mut() {
+                    let ret = scope.insert(
+                        String::from("this"),
+                        ScopeValue {
+                            declaration: name.span,
+                            value_type: ScopeValueType::Variable,
+                            defined: true,
+                            used: true,
+                        },
+                    );
+                    assert!(
+                        ret.is_none(),
+                        "`this` should not exist in the new scope when declaring a class"
+                    );
+                }
+
+                for method in methods {
+                    let WithSpan {
+                        span: _,
+                        value: (method_name, params, _close_paren_span, body),
+                    } = method;
+                    let function_type = if method_name.value == "init" {
+                        FunctionType::InitMethod
+                    } else {
+                        FunctionType::Method
+                    };
+                    self.resolve_function(params, body, function_type)?;
+                }
+
+                self.end_scope();
+                if superclass_name.is_some() {
+                    self.end_scope();
+                }
+
+                self.current_class = enclosing_class;
+            }
             Stmt::VarDecl(name, initializer) => {
                 self.declare_name(name.clone(), stmt.span, ScopeValueType::Variable)?;
                 if let Some(initializer) = initializer {
@@ -139,7 +230,7 @@ impl Resolver {
                 }
                 self.define_name(&name);
             }
-            Stmt::FunDecl(name, params, right_paren, body) => {
+            Stmt::FunDecl((name, params, right_paren, body)) => {
                 self.declare_name(
                     name.clone(),
                     Span::between(&stmt.span, &right_paren),
@@ -166,6 +257,13 @@ impl Resolver {
                 }
 
                 if let Some(expr) = expr {
+                    if self.current_function == FunctionType::InitMethod {
+                        return Err(ResolveError {
+                            message: "Cannot return a value from an `init` method".to_string(),
+                            span: stmt.span,
+                        });
+                    }
+
                     self.resolve_expr(expr)?;
                 }
             }
@@ -209,6 +307,41 @@ impl Resolver {
                 for arg in arguments {
                     self.resolve_expr(arg)?;
                 }
+            }
+            Expr::Get(expr, _) => self.resolve_expr(expr)?,
+            Expr::Set(object, _, value) => {
+                self.resolve_expr(value)?;
+                self.resolve_expr(object)?;
+            }
+            Expr::Super(keyword_span, _) => {
+                if self.current_class == ClassType::None {
+                    return Err(ResolveError {
+                        message: "Cannot use `super` outside of a class".to_string(),
+                        span: expr.span,
+                    });
+                } else if self.current_class != ClassType::Subclass {
+                    return Err(ResolveError {
+                        message: "Cannot use `super` in a class with no superclass".to_string(),
+                        span: expr.span,
+                    });
+                }
+
+                self.resolve_local(WithSpan {
+                    span: *keyword_span,
+                    value: String::from("super"),
+                });
+            }
+            Expr::This => {
+                if self.current_class == ClassType::None {
+                    return Err(ResolveError {
+                        message: "Cannot use `this` outside of a class".to_string(),
+                        span: expr.span,
+                    });
+                }
+                self.resolve_local(WithSpan {
+                    span: expr.span,
+                    value: String::from("this"),
+                });
             }
             Expr::Grouping(expr) | Expr::Unary(_, expr) => self.resolve_expr(expr)?,
             Expr::Nil | Expr::Boolean(_) | Expr::String(_) | Expr::Number(_) => (),
@@ -264,7 +397,7 @@ impl Resolver {
     /// Resolve a name in a local scope by traversing up the scope tree to find the definition of
     /// the name, and add it [`self.locals`](Self.locals).
     fn resolve_local(&mut self, name: WithSpan<String>) {
-        let num = self.scopes.len() - 1;
+        let num = self.scopes.len().saturating_sub(1);
 
         for (idx, scope) in self.scopes.iter_mut().enumerate().rev() {
             if let Some(scope_value) = scope.get_mut(&name.value) {
@@ -316,19 +449,12 @@ fn report_warnings(scope: HashMap<String, ScopeValue>) {
         )
         .collect();
 
-    names.sort_by(|(_, l_type, l_name), (_, r_type, r_name)| {
-        use ScopeValueType::*;
-
-        match (l_type, r_type) {
-            (Function, Function) | (Parameter, Parameter) | (Variable, Variable) => {
-                l_name.cmp(r_name)
-            }
-            (Function, Parameter | Variable) => Ordering::Less,
-            (Parameter, Function) => Ordering::Greater,
-            (Parameter, Variable) => Ordering::Less,
-            (Variable, Parameter | Function) => Ordering::Greater,
-        }
-    });
+    names.sort_by(
+        |(_, l_type, l_name), (_, r_type, r_name)| match l_type.cmp(r_type) {
+            Ordering::Equal => l_name.cmp(&r_name),
+            other => other,
+        },
+    );
 
     for (span, value_type, name) in names {
         rlox_lib::lox::report_warning(
@@ -336,9 +462,10 @@ fn report_warnings(scope: HashMap<String, ScopeValue>) {
             &format!(
                 "{} '{name}' is never used",
                 match value_type {
-                    ScopeValueType::Variable => "Local variable",
+                    ScopeValueType::Class => "Class",
                     ScopeValueType::Function => "Local function",
                     ScopeValueType::Parameter => "Parameter",
+                    ScopeValueType::Variable => "Local variable",
                 }
             ),
         );

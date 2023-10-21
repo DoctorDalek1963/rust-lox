@@ -1,6 +1,9 @@
 //! This module provides pretty-printers for the AST.
 
-use crate::ast::{Expr, SpanExpr, SpanStmt, Stmt};
+use crate::{
+    ast::{Expr, SpanExpr, SpanStmt, Stmt},
+    span::WithSpan,
+};
 
 /// Pretty-print the AST with clarifying parentheses.
 pub struct ParenPrinter;
@@ -16,8 +19,38 @@ impl ParenPrinter {
     }
 
     /// Print a single statement.
-    fn print_stmt(stmt: &SpanStmt) -> String {
+    pub fn print_stmt(stmt: &SpanStmt) -> String {
         match &stmt.value {
+            Stmt::ClassDecl(name, superclass_name, methods) => format!(
+                "class {}{} {{\n{}\n}}",
+                name.value,
+                superclass_name.as_ref().map_or_else(
+                    || String::new(),
+                    |WithSpan {
+                         value: name,
+                         span: _,
+                     }| format!(" < {name}")
+                ),
+                methods
+                    .iter()
+                    .map(
+                        |WithSpan {
+                             span: _,
+                             value: (name, parameters, _, body),
+                         }| format!(
+                            "{}({}) {{\n{}\n}}",
+                            name.value,
+                            parameters
+                                .iter()
+                                .map(|x| &x.value)
+                                .intersperse(&", ".to_string())
+                                .cloned()
+                                .collect::<String>(),
+                            Self::print_stmts(body)
+                        )
+                    )
+                    .collect::<String>()
+            ),
             Stmt::VarDecl(name, initializer) => format!(
                 "var {}{};",
                 name.value,
@@ -27,7 +60,7 @@ impl ParenPrinter {
                     String::new()
                 }
             ),
-            Stmt::FunDecl(name, parameters, _, body) => format!(
+            Stmt::FunDecl((name, parameters, _, body)) => format!(
                 "fun {}({}) {{\n{}\n}}",
                 name.value,
                 parameters
@@ -93,11 +126,20 @@ impl ParenPrinter {
                     .intersperse(", ".to_string())
                     .collect::<String>()
             ),
+            Expr::Get(expr, ident) => format!("({}).{}", Self::print_expr(expr), ident.value),
+            Expr::Set(object, ident, value) => format!(
+                "({}).{} = {}",
+                Self::print_expr(object),
+                ident.value,
+                Self::print_expr(value)
+            ),
+            Expr::Super(_, method_name) => format!("(super.{})", method_name.value),
+            Expr::This => String::from("this"),
             Expr::Grouping(expr) => format!("({})", Self::print_expr(expr)),
             Expr::String(string) => format!("{string:?}"),
             Expr::Number(number) => number.to_string(),
             Expr::Logical(left, operator, right) => format!(
-                "{} {} {}",
+                "({} {} {})",
                 Self::print_expr(left),
                 operator.value,
                 Self::print_expr(right)
@@ -106,7 +148,7 @@ impl ParenPrinter {
                 format!("({}{})", operator.value, Self::print_expr(expr))
             }
             Expr::Variable(name) => name.to_string(),
-            Expr::Assign(name, expr) => format!("{} = {}", name.value, Self::print_expr(expr)),
+            Expr::Assign(name, expr) => format!("({} = {})", name.value, Self::print_expr(expr)),
         }
     }
 }

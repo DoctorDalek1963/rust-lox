@@ -1,0 +1,5 @@
+ERROR: Expected method name after 'super'
+ --> 5:5
+  |
+5 |     super.; // Error at ';': Expect superclass method name.
+  |     ^-----^

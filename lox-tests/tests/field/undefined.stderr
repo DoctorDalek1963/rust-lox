@@ -1,0 +1,5 @@
+ERROR: No property 'bar' on instance
+ --> 4:5
+  |
+4 | foo.bar; // expect runtime error: Undefined property 'bar'.
+  |     ^-^

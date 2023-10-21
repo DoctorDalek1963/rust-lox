@@ -1,0 +1,5 @@
+ERROR: Only class instances have fields, not objects of type nil
+ --> 1:1
+  |
+1 | nil.foo = "value"; // expect runtime error: Only instances have fields.
+  | ^-----^

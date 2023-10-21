@@ -5,6 +5,7 @@ use crossterm::{
     execute,
     style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
 };
+use similar::{ChangeTag, TextDiff};
 use std::{
     env, fs,
     io::{self, stdout},
@@ -65,6 +66,43 @@ fn run_test(file: &Path, interpreter_path: &Path) -> Result<(), TestError> {
     }
 }
 
+fn print_diff(fd: &str, expected: &str, got: &str) -> String {
+    let mut output = String::new();
+
+    output.push_str(&format!(
+        "{}Expected {}:{}\n",
+        Attribute::Bold,
+        fd,
+        Attribute::Reset
+    ));
+    output.push_str(expected);
+    output.push_str("\n\n");
+    output.push_str(&format!(
+        "{}Got {}:{}\n",
+        Attribute::Bold,
+        fd,
+        Attribute::Reset
+    ));
+
+    let diff = TextDiff::from_lines(expected, got);
+    for change in diff.iter_all_changes() {
+        let sign = match change.tag() {
+            ChangeTag::Delete => format!("{}-", SetForegroundColor(Color::Red)),
+            ChangeTag::Insert => format!("{}+", SetForegroundColor(Color::Green)),
+            ChangeTag::Equal => format!("{} ", Attribute::Dim),
+        };
+        output.push_str(&format!(
+            "{}{}{}{}",
+            sign,
+            change,
+            Attribute::Reset,
+            ResetColor
+        ));
+    }
+
+    output
+}
+
 fn display_test_result(filename: &Path, interpreter_path: &Path, print_lock: Arc<Mutex<()>>) {
     let result = run_test(filename, interpreter_path);
 
@@ -97,24 +135,8 @@ fn display_test_result(filename: &Path, interpreter_path: &Path, print_lock: Arc
             let message = match error {
                 TestError::Io(e) => format!("IO error: {e:?}"),
                 TestError::DecodingError(e) => format!("Utf8 decoding error: {e:?}"),
-                TestError::FailedStdout(expected, got) => {
-                    format!(
-                        "{}Expected stdout:{}\n{expected}\n\n{}Got stdout:{}\n{got}\n",
-                        Attribute::Bold,
-                        Attribute::Reset,
-                        Attribute::Bold,
-                        Attribute::Reset,
-                    )
-                }
-                TestError::FailedStderr(expected, got) => {
-                    format!(
-                        "{}Expected stderr:{}\n{expected}\n\n{}Got stderr:{}\n{got}\n",
-                        Attribute::Bold,
-                        Attribute::Reset,
-                        Attribute::Bold,
-                        Attribute::Reset,
-                    )
-                }
+                TestError::FailedStdout(expected, got) => print_diff("stdout", &expected, &got),
+                TestError::FailedStderr(expected, got) => print_diff("stderr", &expected, &got),
             };
 
             let lock = print_lock.lock().unwrap();

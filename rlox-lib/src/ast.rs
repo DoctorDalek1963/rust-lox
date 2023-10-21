@@ -87,34 +87,90 @@ pub type SpanExpr = WithSpan<Expr>;
 
 /// A list of all the possible expressions.
 #[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::missing_docs_in_private_items)]
 pub enum Expr {
+    /// Nothing.
     Nil,
+
+    /// A boolean.
     Boolean(bool),
+
+    /// (left_expr, operator, right_expr).
     Binary(Box<SpanExpr>, WithSpan<BinaryOperator>, Box<SpanExpr>),
+
+    /// (callee, arguments, close_paren_span).
     Call(Box<SpanExpr>, Vec<SpanExpr>, Span),
+
+    /// (object, identifier).
+    Get(Box<SpanExpr>, WithSpan<String>),
+
+    /// (object, identifier, new_value).
+    Set(Box<SpanExpr>, WithSpan<String>, Box<SpanExpr>),
+
+    /// `this` keyword.
+    This,
+
+    /// (super_keyword_span, method_name).
+    Super(Span, WithSpan<String>),
+
+    /// Parens around expression.
     Grouping(Box<SpanExpr>),
+
+    /// A string.
     String(String),
+
+    /// A number.
     Number(f64),
+
+    /// (left_expr, operator, right_expr).
     Logical(Box<SpanExpr>, WithSpan<LogicalOperator>, Box<SpanExpr>),
+
+    /// (operator, expr).
     Unary(WithSpan<UnaryOperator>, Box<SpanExpr>),
+
+    /// The name of a variable.
     Variable(String),
+
+    /// (identifier, new_value).
     Assign(WithSpan<String>, Box<SpanExpr>),
 }
 
-/// An [`Stmt`] wrapped in [`WithSpan`].
+/// A [`Stmt`] wrapped in [`WithSpan`].
 pub type SpanStmt = WithSpan<Stmt>;
+
+/// A function or method declaration. (identifier, parameters, right_paren_span, body).
+pub type FunctionOrMethod = (WithSpan<String>, Vec<WithSpan<String>>, Span, Vec<SpanStmt>);
 
 /// A list of all the possible statements.
 #[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::missing_docs_in_private_items)]
 pub enum Stmt {
+    /// (class_name, superclass_name, methods).
+    ClassDecl(
+        WithSpan<String>,
+        Option<WithSpan<String>>,
+        Vec<WithSpan<FunctionOrMethod>>,
+    ),
+
+    /// (identifier, initializer).
     VarDecl(WithSpan<String>, Option<SpanExpr>),
-    FunDecl(WithSpan<String>, Vec<WithSpan<String>>, Span, Vec<SpanStmt>),
+
+    /// (identifier, parameters, right_paren_span, body).
+    FunDecl(FunctionOrMethod),
+
+    /// See [`Expr`].
     Expression(SpanExpr),
+
+    /// (condition, then_block, else_block)
     If(SpanExpr, Box<SpanStmt>, Option<Box<SpanStmt>>),
+
+    /// (expr).
     Print(SpanExpr),
+
+    /// (keyword_span, return_value).
     Return(Span, Option<SpanExpr>),
+
+    /// (condition, body).
     While(SpanExpr, Box<SpanStmt>),
+
+    /// (body).
     Block(Vec<SpanStmt>),
 }

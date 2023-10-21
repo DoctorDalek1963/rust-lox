@@ -1,0 +1,5 @@
+ERROR: Can only call objects of type function or class, not <Foo instance>
+ --> 4:1
+  |
+4 | foo(); // expect runtime error: Can only call functions and classes.
+  | ^---^

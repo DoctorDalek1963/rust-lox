@@ -3,13 +3,26 @@
 use std::{cmp, fmt, hash::Hash, ops::Deref};
 
 /// A section of source code, measured as indices into source code.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Span {
     /// The index of the start of the span.
     pub start: usize,
 
     /// The index of the end of the span (inclusive).
     pub end: usize,
+}
+
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if cfg!(debug_assertions) {
+            f.debug_struct("Span")
+                .field("start", &self.start)
+                .field("end", &self.end)
+                .finish()
+        } else {
+            write!(f, "")
+        }
+    }
 }
 
 impl Span {
@@ -19,6 +32,11 @@ impl Span {
             start: cmp::min(self.start, other.start),
             end: cmp::max(self.end, other.end),
         }
+    }
+
+    /// Join this span with another one in-place.
+    pub fn mut_union(&mut self, other: &Self) {
+        *self = self.union(other);
     }
 
     pub fn between(left: &Self, right: &Self) -> Self {
@@ -56,10 +74,14 @@ impl<T: Copy> Copy for WithSpan<T> {}
 
 impl<T: fmt::Debug> fmt::Debug for WithSpan<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WithSpan")
-            .field("value", &self.value)
-            .field("span", &self.span)
-            .finish()
+        if cfg!(debug_assertions) {
+            f.debug_struct("WithSpan")
+                .field("value", &self.value)
+                .field("span", &self.span)
+                .finish()
+        } else {
+            write!(f, "{:?}", self.value)
+        }
     }
 }
 

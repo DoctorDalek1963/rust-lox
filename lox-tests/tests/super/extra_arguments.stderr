@@ -1,0 +1,5 @@
+ERROR: Expected 2 arguments in function call but got 4
+  --> 10:5
+   |
+10 |     super.foo("a", "b", "c", "d"); // expect runtime error: Expected 2 arguments but got 4.
+   |     ^---------------------------^

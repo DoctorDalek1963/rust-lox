@@ -1,0 +1,26 @@
+class Person {
+  test() {
+    return this == bob;
+  }
+}
+
+var bob = Person();
+bob.name = "Bob";
+
+print bob.test(); // expect: true
+
+bob = Person();
+print bob.test(); // expect: true
+
+var jane = Person();
+print jane.test(); // expect: true
+print bob.test(); // expect: true
+print jane == bob; // expect: true
+
+bob.name = "Bob";
+print bob.test(); // expect: true
+print bob == jane; // expect: false
+
+jane.name = "Jane";
+print jane.test(); // expect: false
+print bob == jane; // expect: false

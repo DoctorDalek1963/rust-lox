@@ -1,0 +1,7 @@
+class Foo {
+  method() {
+    print this.method;
+  }
+}
+
+Foo().method();

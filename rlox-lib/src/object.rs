@@ -2,9 +2,10 @@
 
 use crate::{
     callable::{lox_function::LoxFunction, LoxCallable},
+    class::{LoxClass, LoxInstance},
     span::WithSpan,
 };
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 /// A [`LoxObject`] wrapped in [`WithSpan`].
 pub type SpanObject = WithSpan<LoxObject>;
@@ -19,6 +20,8 @@ pub enum LoxObject {
     Number(f64),
     NativeFunction(Rc<dyn LoxCallable>),
     LoxFunction(Rc<LoxFunction>),
+    LoxClass(Rc<LoxClass>),
+    LoxInstance(Rc<RefCell<LoxInstance>>),
 }
 
 impl PartialEq for LoxObject {
@@ -29,6 +32,9 @@ impl PartialEq for LoxObject {
             (Self::String(a), Self::String(b)) => a == b,
             (Self::Number(a), Self::Number(b)) => a == b,
             (Self::NativeFunction(a), Self::NativeFunction(b)) => a.name() == b.name(),
+            (Self::LoxFunction(a), Self::LoxFunction(b)) => a.name() == b.name(),
+            (Self::LoxClass(a), Self::LoxClass(b)) => a == b,
+            (Self::LoxInstance(a), Self::LoxInstance(b)) => *a.borrow() == *b.borrow(),
             _ => false,
         }
     }
@@ -46,6 +52,8 @@ impl LoxObject {
             Number(_) => "number".to_string(),
             NativeFunction(_) => "<native fn>".to_string(),
             LoxFunction(_) => "<fn>".to_string(),
+            LoxClass(_) => "<class>".to_string(),
+            LoxInstance(instance) => format!("<{} instance>", instance.borrow().class_name()),
         }
     }
 
@@ -58,8 +66,10 @@ impl LoxObject {
             Boolean(b) => b.to_string(),
             String(s) => s.to_string(),
             Number(n) => n.to_string(),
-            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
-            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
+            NativeFunction(func) => format!("<native fn {}>", func.name()),
+            LoxFunction(func) => format!("<fn {}>", func.name()),
+            LoxClass(class) => format!("<class {}>", class.name()),
+            LoxInstance(instance) => format!("<{} instance>", instance.borrow().class_name()),
         }
     }
 
@@ -68,12 +78,8 @@ impl LoxObject {
         use LoxObject::*;
 
         match self {
-            Nil => "nil".to_string(),
-            Boolean(b) => b.to_string(),
             String(s) => format!("{s:?}"),
-            Number(n) => n.to_string(),
-            NativeFunction(func) => format!("<native fn \"{}\">", func.name()),
-            LoxFunction(func) => format!("<fn \"{}\">", func.name()),
+            _ => self.print(),
         }
     }
 

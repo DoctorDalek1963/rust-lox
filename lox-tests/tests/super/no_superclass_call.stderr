@@ -1,0 +1,5 @@
+ERROR: Cannot use `super` in a class with no superclass
+ --> 3:5
+  |
+3 |     super.doesNotExist(1); // Error at 'super': Can't use 'super' in a class with no superclass.
+  |     ^----------------^

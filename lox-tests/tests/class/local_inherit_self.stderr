@@ -1,0 +1,5 @@
+ERROR: A class cannot inherit from itself
+ --> 2:9
+  |
+2 |   class Foo < Foo {} // Error at 'Foo': A class can't inherit from itself.
+  |         ^-------^

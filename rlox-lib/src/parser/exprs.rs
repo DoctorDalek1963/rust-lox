@@ -14,7 +14,7 @@ impl<'s> Parser<'s> {
         self.parse_assignment()
     }
 
-    /// assignment → IDENTIFIER "=" assignment | logic_or ;
+    /// assignment → ( call "." )? IDENTIFIER "=" assignment | logic_or ;
     fn parse_assignment(&mut self) -> ParseResult<'s, SpanExpr> {
         let expr = self.parse_logic_or()?;
 
@@ -28,7 +28,7 @@ impl<'s> Parser<'s> {
             } = expr
             {
                 return Ok(WithSpan {
-                    span: expr.span.union(&r_value.span),
+                    span: var_name_span.union(&r_value.span),
                     value: Expr::Assign(
                         WithSpan {
                             span: var_name_span,
@@ -36,6 +36,15 @@ impl<'s> Parser<'s> {
                         },
                         Box::new(r_value),
                     ),
+                });
+            } else if let WithSpan {
+                span: get_expr_span,
+                value: Expr::Get(l_value, ident),
+            } = expr
+            {
+                return Ok(WithSpan {
+                    span: get_expr_span.union(&r_value.span),
+                    value: Expr::Set(l_value, ident, Box::new(r_value)),
                 });
             } else {
                 ParseError {
@@ -258,13 +267,27 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// call → primary ( "(" arguments? ")" )* ;
+    /// call → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     fn parse_call(&mut self) -> ParseResult<'s, SpanExpr> {
         let mut expr = self.parse_primary()?;
 
         loop {
             if self.match_tokens([TokenType::LeftParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_tokens([TokenType::Dot]) {
+                let Token { lexeme, span, .. } = self.consume(
+                    TokenType::Identifier,
+                    Some(expr.span.union(&self.previous().unwrap().span)),
+                    "Expected property name after '.'".to_string(),
+                )?;
+                let name = WithSpan {
+                    span,
+                    value: lexeme.to_string(),
+                };
+                expr = WithSpan {
+                    span: expr.span.union(&span),
+                    value: Expr::Get(Box::new(expr), name),
+                };
             } else {
                 break;
             }
@@ -319,46 +342,75 @@ impl<'s> Parser<'s> {
         })
     }
 
-    /// primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+    /// primary → NUMBER | STRING | "true" | "false" | "nil"
+    ///         | "(" expression ")" | "super" "." IDENTIFIER ;
     fn parse_primary(&mut self) -> ParseResult<'s, SpanExpr> {
         use TokenType::*;
 
-        if self.match_tokens([True, False, Nil, Number, String, Identifier, LeftParen]) {
-            let previous = self.previous();
+        if self.match_tokens([
+            True, False, Nil, This, Super, Number, String, Identifier, LeftParen,
+        ]) {
+            let previous = self.previous().unwrap();
+            let mut span = previous.span;
 
-            let mut span = match previous {
-                Some(Token { span, .. }) => *span,
-                _ => unreachable!(),
-            };
             let value = match previous {
-                Some(Token {
+                Token {
                     token_type: True, ..
-                }) => Expr::Boolean(true),
-                Some(Token {
+                } => Expr::Boolean(true),
+                Token {
                     token_type: False, ..
-                }) => Expr::Boolean(false),
-                Some(Token {
+                } => Expr::Boolean(false),
+                Token {
                     token_type: Nil, ..
-                }) => Expr::Nil,
-                Some(Token {
+                } => Expr::Nil,
+                Token {
+                    token_type: This, ..
+                } => Expr::This,
+                Token {
+                    token_type: Super, ..
+                } => {
+                    let super_keyword_span = self.previous().unwrap().span;
+                    let dot = self.consume(
+                        TokenType::Dot,
+                        Some(span),
+                        "Expected '.' after 'super'".to_string(),
+                    )?;
+                    let Token {
+                        lexeme,
+                        span: method_span,
+                        ..
+                    } = self.consume(
+                        TokenType::Identifier,
+                        Some(span.union(&dot.span)),
+                        "Expected method name after 'super'".to_string(),
+                    )?;
+                    let method_name = WithSpan {
+                        span: method_span,
+                        value: lexeme.to_string(),
+                    };
+
+                    span.mut_union(&method_name.span);
+                    Expr::Super(super_keyword_span, method_name)
+                }
+                Token {
                     token_type: Number,
                     literal: Some(TokenLiteral::Number(num)),
                     ..
-                }) => Expr::Number(*num),
-                Some(Token {
+                } => Expr::Number(*num),
+                Token {
                     token_type: String,
                     literal: Some(TokenLiteral::String(string)),
                     ..
-                }) => Expr::String(string.to_string()),
-                Some(Token {
+                } => Expr::String(string.to_string()),
+                Token {
                     token_type: Identifier,
                     lexeme,
                     ..
-                }) => Expr::Variable(lexeme.to_string()),
-                Some(Token {
+                } => Expr::Variable(lexeme.to_string()),
+                Token {
                     token_type: LeftParen,
                     ..
-                }) => {
+                } => {
                     let expr = self.parse_expression()?;
                     let right_paren_span = self
                         .consume(
@@ -367,10 +419,12 @@ impl<'s> Parser<'s> {
                             "Expected ')' at end of grouped expression".to_string(),
                         )?
                         .span;
-                    span = span.union(&right_paren_span);
+                    span.mut_union(&right_paren_span);
                     Expr::Grouping(Box::new(expr))
                 }
-                _ => unreachable!(),
+                _ => unreachable!(
+                    "match_tokens() will only return a token with a TokenType that we expected"
+                ),
             };
 
             Ok(WithSpan { span, value })

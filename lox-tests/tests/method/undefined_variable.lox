@@ -1,0 +1,10 @@
+class Person {
+  test() {
+    return this == bob;
+  }
+}
+
+var bob = Person();
+bob.name = "Bob";
+
+print bob.test();
