@@ -1,0 +1,7 @@
+ERROR: Expected property name after '.'
+ --> 2:1
+  |
+2 | 123.
+  | ^---
+3 | 
+  | ^
