@@ -41,8 +41,7 @@ impl LoxClass {
         self.methods.get(name).or_else(|| {
             self.superclass
                 .as_ref()
-                .map(|class| class.find_method(name))
-                .flatten()
+                .and_then(|class| class.find_method(name))
         })
     }
 }

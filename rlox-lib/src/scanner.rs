@@ -268,6 +268,7 @@ mod tests {
     use super::*;
     use TokenType::*;
 
+    #[allow(clippy::needless_lifetimes, reason = "I prefer to be explicit here")]
     fn scan<'s>(code: &'s str) -> Vec<(TokenType, &'s str, Option<TokenLiteral<'s>>)> {
         Scanner::scan_tokens(code)
             .into_iter()

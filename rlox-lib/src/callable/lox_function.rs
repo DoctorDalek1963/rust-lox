@@ -97,6 +97,10 @@ impl LoxCallable for LoxFunction {
     ) -> Result<LoxObject, RuntimeError> {
         let mut environment = Environment::enclosing(Some(Rc::clone(&self.environment)));
 
+        #[allow(
+            clippy::needless_range_loop,
+            reason = "Doing it this way is simpler and easier"
+        )]
         for i in 0..self.parameters.len() {
             environment.define(self.parameters[i].value.clone(), arguments[i].value.clone());
         }

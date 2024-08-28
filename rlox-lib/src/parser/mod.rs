@@ -186,9 +186,11 @@ impl<'s> Parser<'s> {
                 return;
             }
 
-            match self.peek().map(|t| t.token_type) {
-                Some(Class | Fun | Var | For | If | While | Print | Return) => return,
-                _ => {}
+            if matches!(
+                self.peek().map(|t| t.token_type),
+                Some(Class | Fun | Var | For | If | While | Print | Return)
+            ) {
+                return;
             }
 
             self.advance();

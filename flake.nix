@@ -96,6 +96,12 @@
         checks =
           packages
           // {
+            clippy = craneLib.cargoClippy (commonArgs
+              // {
+                inherit cargoArtifacts;
+                cargoClippyExtraArgs = "--all-targets --workspace -- --deny warnings";
+              });
+
             fmt = craneLib.cargoFmt {
               inherit src;
             };

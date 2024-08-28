@@ -85,12 +85,15 @@ impl<'s> Parser<'s> {
             span.mut_union(&prev);
         }
 
-        self.consume(
-            TokenType::LeftParen,
-            Some(span),
-            format!("Expected '(' after {kind} name"),
-        )?
-        .span;
+        span.mut_union(
+            &self
+                .consume(
+                    TokenType::LeftParen,
+                    Some(span),
+                    format!("Expected '(' after {kind} name"),
+                )?
+                .span,
+        );
 
         let mut parameters: Vec<WithSpan<String>> = Vec::new();
         let mut reported_max_params_error = false;
@@ -143,12 +146,15 @@ impl<'s> Parser<'s> {
             )?
             .span;
 
-        self.consume(
-            TokenType::LeftBrace,
-            Some(span),
-            format!("Expected '{{' before {kind} body"),
-        )?
-        .span;
+        span.mut_union(
+            &self
+                .consume(
+                    TokenType::LeftBrace,
+                    Some(span),
+                    format!("Expected '{{' before {kind} body"),
+                )?
+                .span,
+        );
 
         let stmts = self.parse_block()?;
         span.mut_union(&stmts.span);

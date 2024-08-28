@@ -171,20 +171,20 @@ impl LoxCallable for Env {
                         repr,
                     }) => string.push_str(&format!("{name}: {type_name} = {repr};")),
                     ListEntry::StartScope => {
-                        string.push_str("{");
-                        scope_counter = scope_counter + 1;
+                        string.push('{');
+                        scope_counter += 1;
                     }
                 }
                 string.push('\n');
             }
 
             while scope_counter > 0 {
-                scope_counter = scope_counter - 1;
+                scope_counter -= 1;
                 for _ in 0..scope_counter {
                     string.push_str("  ");
                 }
 
-                string.push_str("}");
+                string.push('}');
                 string.push('\n');
             }
 

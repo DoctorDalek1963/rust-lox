@@ -228,12 +228,12 @@ impl Resolver {
                 if let Some(initializer) = initializer {
                     self.resolve_expr(initializer)?;
                 }
-                self.define_name(&name);
+                self.define_name(name);
             }
             Stmt::FunDecl((name, params, right_paren, body)) => {
                 self.declare_name(
                     name.clone(),
-                    Span::between(&stmt.span, &right_paren),
+                    Span::between(&stmt.span, right_paren),
                     ScopeValueType::Function,
                 )?;
                 self.define_name(&name.value);
@@ -280,9 +280,11 @@ impl Resolver {
     fn resolve_expr(&mut self, expr: &SpanExpr) -> Result {
         match &expr.value {
             Expr::Variable(name) => {
-                if self.scopes.last().is_some_and(|scope| {
-                    scope.get(name).is_some_and(|value| value.defined == false)
-                }) {
+                if self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.get(name).is_some_and(|value| !value.defined))
+                {
                     return Err(ResolveError {
                         message: "Cannot read local variable in its own initializer".to_string(),
                         span: expr.span,
@@ -451,7 +453,7 @@ fn report_warnings(scope: HashMap<String, ScopeValue>) {
 
     names.sort_by(
         |(_, l_type, l_name), (_, r_type, r_name)| match l_type.cmp(r_type) {
-            Ordering::Equal => l_name.cmp(&r_name),
+            Ordering::Equal => l_name.cmp(r_name),
             other => other,
         },
     );

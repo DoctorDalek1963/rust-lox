@@ -4,6 +4,7 @@ use crate::{
     ast::{Expr, SpanExpr, SpanStmt, Stmt},
     span::WithSpan,
 };
+use std::fmt::Write;
 
 /// Pretty-print the AST with clarifying parentheses.
 pub struct ParenPrinter;
@@ -25,19 +26,21 @@ impl ParenPrinter {
                 "class {}{} {{\n{}\n}}",
                 name.value,
                 superclass_name.as_ref().map_or_else(
-                    || String::new(),
+                    String::new,
                     |WithSpan {
                          value: name,
                          span: _,
                      }| format!(" < {name}")
                 ),
-                methods
-                    .iter()
-                    .map(
-                        |WithSpan {
-                             span: _,
-                             value: (name, parameters, _, body),
-                         }| format!(
+                methods.iter().fold(
+                    String::new(),
+                    |mut output,
+                     WithSpan {
+                         span: _,
+                         value: (name, parameters, _, body),
+                     }| {
+                        let _ = write!(
+                            output,
                             "{}({}) {{\n{}\n}}",
                             name.value,
                             parameters
@@ -47,9 +50,10 @@ impl ParenPrinter {
                                 .cloned()
                                 .collect::<String>(),
                             Self::print_stmts(body)
-                        )
-                    )
-                    .collect::<String>()
+                        );
+                        output
+                    }
+                )
             ),
             Stmt::VarDecl(name, initializer) => format!(
                 "var {}{};",
@@ -93,7 +97,7 @@ impl ParenPrinter {
                 "return{};",
                 expr.as_ref()
                     .map(|expr| format!(" {}", Self::print_expr(expr)))
-                    .unwrap_or_else(|| String::new())
+                    .unwrap_or_else(String::new)
             ),
             Stmt::While(condition, body) => format!(
                 "while ({}) {{ {} }}",

@@ -78,17 +78,21 @@ impl Environment {
         name: &WithSpan<String>,
         value: LoxObject,
     ) {
-        let env = Environment::ancestor(env, depth).expect(&format!(
-            "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
-            name.value, name.span
-        ));
+        let env = Environment::ancestor(env, depth).unwrap_or_else(|| {
+            panic!(
+                "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+                name.value, name.span
+            )
+        });
         *env.borrow_mut()
             .values
             .get_mut(&name.value)
-            .expect(&format!(
+            .unwrap_or_else(|| {
+                panic!(
                 "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
                 name.value, name.span
-            )) = value;
+            )
+            }) = value;
     }
 
     /// Get the value of the given name, returning a [`RuntimeError`] if the name is undefined.
@@ -112,17 +116,21 @@ impl Environment {
         name: &WithSpan<String>,
     ) -> LoxObject {
         Environment::ancestor(env, depth)
-            .expect(&format!(
-                "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
-                name.value, name.span
-            ))
+            .unwrap_or_else(|| {
+                panic!(
+                    "Resolved environment depth ({depth}) for name '{}' is too great (span = {:?})",
+                    name.value, name.span
+                )
+            })
             .borrow()
             .values
             .get(&name.value)
-            .expect(&format!(
+            .unwrap_or_else(|| {
+                panic!(
                 "Name '{}' does not exist at expected environment depth ({depth}) (span = {:?})",
                 name.value, name.span
-            ))
+            )
+            })
             .clone()
     }
 

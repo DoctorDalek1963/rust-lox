@@ -145,6 +145,12 @@ impl<T: Interpreter> LoxInterpreter<T> {
     }
 }
 
+impl<T: Interpreter> Default for LoxInterpreter<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The level of severity in an error/warning message.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SeverityLevel {

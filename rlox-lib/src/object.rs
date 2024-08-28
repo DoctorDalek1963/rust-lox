@@ -85,6 +85,7 @@ impl LoxObject {
 
     /// Is this object truthy?
     pub fn is_truthy(&self) -> bool {
+        #[allow(clippy::match_like_matches_macro, reason = "This is much clearer")]
         match self {
             Self::Nil | Self::Boolean(false) => false,
             _ => true,

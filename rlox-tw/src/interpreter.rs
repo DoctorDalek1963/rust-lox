@@ -703,7 +703,7 @@ impl TwInterpreter {
             Err(RuntimeError {
                 message: format!(
                     "Unsupported operation '{}' between types '{}' and '{}'",
-                    operator.to_string(),
+                    operator,
                     left.type_name(),
                     right.type_name()
                 ),
@@ -801,7 +801,7 @@ impl TwInterpreter {
             Err(RuntimeError {
                 message: format!(
                     "Unsupported operation '{}' on type '{}'",
-                    operator.to_string(),
+                    operator,
                     value.type_name(),
                 ),
                 span,
