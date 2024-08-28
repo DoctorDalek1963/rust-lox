@@ -92,6 +92,54 @@
             };
           };
         };
+
+        checks =
+          packages
+          // {
+            fmt = craneLib.cargoFmt {
+              inherit src;
+            };
+
+            doctests = craneLib.cargoTest (commonArgs
+              // {
+                inherit cargoArtifacts;
+                cargoTestArgs = "--doc";
+              });
+
+            nextest = craneLib.cargoNextest (commonArgs
+              // {
+                inherit cargoArtifacts;
+                partitions = 1;
+                partitionType = "count";
+                cargoNextestExtraArgs = "--no-fail-fast";
+              });
+          };
+
+        packages = {
+          rlox-tw = craneLib.buildPackage (commonArgs
+            // {
+              pname = "rlox-tw";
+              cargoExtraArgs = "--package=rlox-tw";
+              meta.mainProgram = "rlox-tw";
+
+              inherit cargoArtifacts;
+              inherit (craneLib.crateNameFromCargoToml {inherit src;}) version;
+            });
+
+          doc = craneLib.cargoDoc (commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoDocExtraArgs = "--no-deps --document-private-items";
+              RUSTDOCFLAGS = "--deny warnings";
+            });
+
+          doc-with-deps = craneLib.cargoDoc (commonArgs
+            // {
+              inherit cargoArtifacts;
+              cargoDocExtraArgs = "--document-private-items";
+              RUSTDOCFLAGS = "--deny warnings";
+            });
+        };
       };
     };
 }
