@@ -221,7 +221,6 @@ mod tests {
             .map(|stmt| stmt.value)
             .collect();
 
-        #[allow(illegal_floating_point_literal_pattern)]
         let &[Stmt::Print(WithSpan {
             span: _,
             value:

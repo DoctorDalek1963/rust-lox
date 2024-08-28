@@ -98,7 +98,7 @@ impl<T: Interpreter> LoxInterpreter<T> {
         let history_file =
             home::home_dir().map(|home| home.join(".config").join("rlox").join(".history"));
         if let Some(history_file) = &history_file {
-            if let Ok(false) = fs::try_exists(history_file) {
+            if let Ok(false) = fs::exists(history_file) {
                 fs::create_dir_all(history_file.parent().unwrap())?;
                 fs::File::create_new(history_file)?;
             }
